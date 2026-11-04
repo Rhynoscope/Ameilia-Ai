@@ -1,0 +1,17 @@
+# Cloudflare Worker Local Development Variables (.dev.vars)
+# Copy this file to .dev.vars and add your secrets for local wrangler development
+# NOTE: Never commit .dev.vars to Git!
+
+# Gemini API Key (Required) - Get one free at https://aistudio.google.com/
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Default Gemini Model (Optional)
+GEMINI_MODEL=gemini-2.5-flash
+
+# Cron Trigger Authorization Secret (Optional, for manual cron triggers)
+CRON_SECRET=your_optional_cron_secret
+
+# Push Notification Keys (Optional, generated via `npx web-push generate-vapid-keys`)
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:admin@example.com

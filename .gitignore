@@ -24,11 +24,19 @@
 
 # Environment and secrets (CRITICAL: Never commit API keys)
 .env
+.env*
 .env*.local
 .env.development
 .env.test
 .env.production
 !.env.example
+
+# Cloudflare Wrangler & OpenNext
+.wrangler/
+.open-next/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
 
 # Debug and runtime logs
 npm-debug.log*

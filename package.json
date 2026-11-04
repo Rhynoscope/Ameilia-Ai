@@ -1,15 +1,21 @@
 {
-  "name": "amelia-assistant",
+  "name": "ameilia-ai",
   "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "build:worker": "opennextjs-cloudflare build",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "d1:migrate:local": "wrangler d1 execute amelia-assistant-db --local --file=./migrations/0001_initial_schema.sql",
+    "d1:migrate:remote": "wrangler d1 execute amelia-assistant-db --remote --file=./migrations/0001_initial_schema.sql",
     "lint": "next lint"
   },
   "dependencies": {
     "@google/genai": "^2.32.0",
+    "@opennextjs/cloudflare": "^1.20.15",
     "clsx": "^2.1.1",
     "lucide-react": "^1.16.0",
     "next": "15.2.1",
@@ -28,6 +34,7 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "wrangler": "^4.156.2"
   }
 }

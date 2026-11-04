@@ -1,279 +1,295 @@
 # Amelia Assistant — Personal AI Relationship Companion & LDR Texting Coach
 
-![Amelia Assistant](https://img.shields.io/badge/Amelia%20Assistant-v2.5.0-ff69b4.svg)
+![Amelia Assistant](https://img.shields.io/badge/Amelia%20Assistant-Cloudflare%20Edition-ff69b4.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-15.2.1-black.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)
-![Google Gemini](https://img.shields.io/badge/Google%20Gemini-SDK%20v0.1-orange.svg)
-![Render Ready](https://img.shields.io/badge/Render-Blueprint%20Ready-46E3B7.svg)
+![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers%20%26%20D1%20%26%20R2-F38020.svg)
+![Google Gemini](https://img.shields.io/badge/Google%20Gemini-SDK%20v2.32-orange.svg)
 
-**Amelia Assistant** is an elegant, private, browser-based relationship companion built specifically for couples in **long-distance relationships (LDR)**. Built with Next.js 15, React 19, TypeScript, Tailwind CSS, and Google's official `@google/genai` JavaScript SDK.
+**Amelia Assistant** is an elegant, private, browser-based relationship companion built specifically for couples in **long-distance relationships (LDR)**. Powered by Next.js 15, React 19, TypeScript, Tailwind CSS, Google's official `@google/genai` JavaScript SDK, and architected natively for **Cloudflare Workers, D1, and R2 (100% Free Tier)**.
 
-It helps you stay close across the miles: starting genuine conversations, finding the right words when she texts you, responding to photos, videos, and voice notes she sends, planning creative virtual dates, and keeping emotional intimacy strong.
+It helps you stay emotionally close across the miles: starting authentic conversations, crafting the perfect text replies, reacting thoughtfully to photos, videos, and voice notes she sends, planning virtual dates, and keeping communication loving and effortless.
 
 ---
 
-## 💖 Key Capabilities & Architecture
+## 💖 Key Features & Capabilities
 
-### 1. Unified Amelia AI Chat Interface
-- **Centralized Experience**: Everything (texting advice, screenshot analysis, photo reactions, audio voice notes, video analysis, message drafting, apologies) is handled through one unified conversation.
+### 1. Unified "Amelia AI" Chat Interface
+- **Centralized Experience**: All tools (texting advice, screenshot analysis, photo reactions, audio voice notes, video analysis, message drafting, apologies) are integrated into one continuous conversation.
 - **3–5 Ready-to-Send Text Suggestions**: Whenever you ask what to text Amelia, the AI provides 3 to 5 realistic, natural messages you can directly copy and send, complete with tone badges and one-click variations (*Shorter, Longer, Sweeter, Funnier, More Affectionate*).
-- **Multimodal Attachment System**: Drag-and-drop or attach:
-  - 📸 **Photos & Screenshots**: PNG, JPG, JPEG, WEBP (with automatic client-side compression).
+- **Multimodal Attachment System**:
+  - 📸 **Photos & Screenshots**: PNG, JPG, JPEG, WEBP (stored in private Cloudflare R2 bucket).
   - 🎙️ **Voice Notes & Audio**: MP3, WAV, M4A, AAC, OGG, FLAC.
   - 🎬 **Video Clips**: MP4, MOV, WEBM.
 
-### 2. Complete Chat History & Management (Feature 1)
-- **Sidebar History**: Browse past conversations with auto-generated contextual titles, last message previews, message counts, and relative timestamps (*"Just now"*, *"2h ago"*, *"Yesterday"*).
+### 2. Complete Conversation History & Management
+- **Sidebar History**: Browse past conversations with auto-generated titles, message previews, message counts, and timestamps (*"Just now"*, *"2h ago"*, *"Yesterday"*).
 - **Search & Filter**: Search conversations by title or past message text in real time.
 - **Active vs. Archived Tabs**: Organize ongoing conversations and archive older ones.
 - **Three-Dot Menu (`...`) per Chat**:
   - ✏️ **Rename**: Inline or modal title editing.
   - 📦 **Archive / Restore**: Move conversations between Active and Archived views.
-  - 🗑️ **Permanent Deletion**: Deletes conversations and messages from the database with confirmation; chats never reappear upon page refresh.
+  - 🗑️ **Permanent Deletion**: Permanently deletes conversations, messages, and associated R2 media assets from storage. Chats never reappear upon page refresh.
 - **Global Actions**: Archive All, Restore All, and Purge All Conversations.
 
-### 3. Extra Thinking Mode (Feature 2)
+### 3. Extra Thinking Mode (Reasoning Depth)
 Directly beside the message input bar, toggle between three reasoning depths powered by Gemini's official `thinking_level` parameter:
-1. ⚡ **Quick** (`minimal`): Ultra-fast replies with minimal overhead. Best for everyday texting ideas and quick replies.
+1. ⚡ **Quick** (`minimal`): Ultra-fast replies with minimal latency. Best for everyday texting ideas and quick replies.
 2. 🧠 **Normal** (`medium`): Balanced contextual understanding. Perfect for everyday conversation advice.
 3. 💡 **Extra Thinking** (`high`): In-depth analytical reasoning for complex emotional situations, multi-screenshot analysis, or resolving delicate relationship friction.
-- User preference is automatically saved to `localStorage` and sent with every request.
 
-### 4. Dual Database Persistence (Zero Configuration)
-- **Local Development**: Runs natively with zero setup on SQLite (`node:sqlite`) stored at `./data/amelia.db`.
-- **Render & Production**: Automatically connects to **Render PostgreSQL** when `DATABASE_URL` is detected, featuring connection pooling, automatic schema creation, and non-ephemeral storage.
-
-### 5. Visual Identity & Accessibility
-- Clean white background (`#FFFFFF`) with soft romantic pink accents and charcoal/black text for readability.
-- Subtle heart accents, smooth transitions, mobile-responsive layout, and zero dark purple styling.
+### 4. Cloudflare Serverless Architecture (Zero Cost)
+- **Edge Compute**: Cloudflare Workers via `@opennextjs/cloudflare`. Instant global cold starts, running across 300+ edge locations worldwide.
+- **Database (Cloudflare D1)**: Serverless SQLite database (`amelia-assistant-db`) with full transactional persistence.
+- **Media Storage (Cloudflare R2)**: Zero-egress S3-compatible storage (`amelia-assistant-media`) with a secure private streaming proxy (`/api/media/[key]`).
+- **Scheduled Reminders (Cloudflare Cron Triggers)**: Background cron jobs (`0 14,18,21 * * *`) that trigger check-in reminders even when your browser tab is closed.
+- **Local Fallback**: Automatically switches to local SQLite (`./data/amelia.db`) during local development so you never need to connect to cloud services just to test UI changes.
 
 ---
 
-## 🚀 Quick Start & Local Setup
+## ☁️ Cloudflare Deployment Guide (Beginner Friendly)
 
-### 1. Prerequisites
-- **Node.js**: v20 or v22 (v24 supported)
-- **pnpm** (recommended) or **npm**
+Deploying Amelia Assistant to Cloudflare is 100% free using Cloudflare's generous Free Tier. Follow these step-by-step instructions.
 
-### 2. Installation
+### Prerequisites
+1. A **Cloudflare Account**: Sign up free at [dash.cloudflare.com](https://dash.cloudflare.com/).
+2. A **Google Gemini API Key**: Generate a free API key at [Google AI Studio](https://aistudio.google.com/app/apikey).
+3. **Node.js** (v20 or v22+) and **pnpm** installed on your computer.
+
+---
+
+### Step 1: Install Wrangler CLI & Authenticate
+Open your local terminal and log in to Cloudflare:
 ```bash
-git clone <your-repo-url>
-cd amelia-assistant
+npx wrangler login
+```
+*A browser window will open asking you to authorize Wrangler. Click **Allow**.*
+
+---
+
+### Step 2: Create Your Cloudflare D1 Database
+Create the production serverless SQLite database:
+```bash
+npx wrangler d1 create amelia-assistant-db
+```
+The output will display something like:
+```
+✅ Successfully created DB 'amelia-assistant-db'
+[[d1_databases]]
+binding = "DB"
+database_name = "amelia-assistant-db"
+database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+```
+
+Open `wrangler.jsonc` in your code editor and update the `database_id` field with your new ID:
+```jsonc
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "amelia-assistant-db",
+      "database_id": "YOUR_ACTUAL_D1_DATABASE_ID_HERE"
+    }
+  ],
+```
+
+---
+
+### Step 3: Run Database Migrations
+Apply the initial table schemas (conversations, messages, memories, dates, reminders) to your Cloudflare D1 database:
+```bash
+pnpm run d1:migrate:remote
+```
+*(Or run `npx wrangler d1 execute amelia-assistant-db --remote --file=./migrations/0001_initial_schema.sql`)*
+
+---
+
+### Step 4: Create Cloudflare R2 Media Bucket
+Create the object storage bucket for photos, videos, and voice notes:
+```bash
+npx wrangler r2 bucket create amelia-assistant-media
+```
+*(The bucket name `amelia-assistant-media` matches the binding configured in `wrangler.jsonc`).*
+
+---
+
+### Step 5: Set Your Encrypted Worker Secrets
+Never commit API keys to GitHub! Instead, securely encrypt your Gemini API key in Cloudflare:
+```bash
+npx wrangler secret put GEMINI_API_KEY
+```
+*When prompted, paste your Google Gemini API key and hit Enter.*
+
+*(Optional) If you want to customize the cron reminder security or push notifications:*
+```bash
+npx wrangler secret put CRON_SECRET
+```
+
+---
+
+### Step 6: Connect to Cloudflare Workers Builds (Automatic CI/CD)
+
+The easiest way to host and auto-deploy Amelia Assistant is via **Cloudflare Workers Builds**:
+
+1. Push your updated code to your GitHub repository:
+   ```bash
+   git add .
+   git commit -m "feat: migrate to Cloudflare Workers, D1, and R2"
+   git push origin main
+   ```
+2. Navigate to your [Cloudflare Dashboard](https://dash.cloudflare.com/).
+3. On the left sidebar, click **Compute (Workers & Pages)**.
+4. Click **Create** → select **Workers Builds** (or Pages).
+5. Choose **Connect to Git** and select your GitHub repository (`Rhynoscope/Ameilia-Ai`).
+6. Configure the build settings:
+   - **Framework preset**: `OpenNext (Next.js)` (or `None`)
+   - **Build command**: `pnpm run build:worker` *(or `npx @opennextjs/cloudflare build`)*
+   - **Deploy command**: `npx wrangler deploy`
+   - **Root directory**: `/`
+7. Under **Bindings**:
+   - Bind D1 Database: Variable name `DB`, select `amelia-assistant-db`.
+   - Bind R2 Bucket: Variable name `MEDIA_BUCKET`, select `amelia-assistant-media`.
+8. Under **Settings → Variables and Secrets**:
+   - Add Secret: `GEMINI_API_KEY` with your Google Gemini API key.
+   - Add Variable (optional): `GEMINI_MODEL` with value `gemini-2.5-flash`.
+9. Click **Save and Deploy**!
+
+Cloudflare will automatically build and publish your site with a custom `*.workers.dev` URL and free SSL! Whenever you push new commits to your `main` branch, Cloudflare will automatically rebuild and deploy your changes.
+
+---
+
+### Alternative: Deploy Directly from Your Terminal
+If you prefer deploying directly from your computer without configuring Git CI/CD:
+```bash
+pnpm run deploy
+```
+This builds the Next.js worker bundle via `@opennextjs/cloudflare` and deploys it immediately to your Cloudflare account.
+
+---
+
+## 💻 Local Development
+
+You can run Amelia Assistant locally on your machine with full functionality:
+
+```bash
+# 1. Install dependencies
 pnpm install
-```
 
-### 3. Environment Configuration
-Create a `.env` file in the root directory (or copy from `.env.example`):
-```bash
-cp .env.example .env
-```
+# 2. Copy the development variables template
+cp .dev.vars.example .dev.vars
 
-Edit `.env` and add your Google Gemini API Key:
-```env
-# Get your free key at: https://aistudio.google.com/app/apikey
-GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-3.5-flash-lite
-PORT=3000
-```
-*(If no API key is set, the application operates in Demo Mode with realistic simulated responses so you can safely preview the UI).*
+# 3. Add your Gemini API key inside .dev.vars
+# GEMINI_API_KEY=your_key_here
 
-### 4. Run Development Server
-```bash
+# 4. Start the Next.js development server
 pnpm dev
 ```
-Open `http://localhost:3000` in your web browser.
-
-### 5. Run Production Build Locally
-```bash
-pnpm build
-pnpm start
-```
+Open `http://localhost:3000` in your web browser. Local data is automatically persisted to `./data/amelia.db` using Node.js SQLite with zero setup.
 
 ---
 
-## 🐙 Pushing to GitHub (Step-by-Step)
+## 🎁 Cloudflare Free Tier Capacity & Limits
 
-Follow these exact steps on your computer to push the project to your GitHub account:
+Amelia Assistant is specifically engineered to fit comfortably within Cloudflare's **100% Free Plan**:
 
-### Step 1: Ensure Git is Installed
-Download and install Git from [git-scm.com](https://git-scm.com/) if you haven't already.
-
-### Step 2: Initialize Git & Verify Ignored Secrets
-The project's `.gitignore` is already preconfigured to protect your private credentials and database files (`.env`, `data/*.db`, `node_modules/`, `.next/`).
-
-In your terminal:
-```bash
-cd amelia-assistant
-
-# Initialize git repository
-git init
-
-# Check that .env and data/ are ignored
-git status
-```
-*(Verify that `.env` and any `.db` files do NOT appear under untracked files).*
-
-### Step 3: Commit the Files
-```bash
-git add .
-git commit -m "feat: complete Amelia Assistant with chat management, thinking modes, and Render support"
-```
-
-### Step 4: Create a Repository on GitHub
-1. Go to [github.com/new](https://github.com/new).
-2. Enter repository name: `amelia-assistant` (you can choose Public or Private).
-3. Do **NOT** initialize with a README, .gitignore, or license (we already have them).
-4. Click **Create repository**.
-
-### Step 5: Link and Push
-```bash
-# Rename branch to main
-git branch -M main
-
-# Add your GitHub remote (replace with your GitHub URL)
-git remote add origin https://github.com/YOUR_USERNAME/amelia-assistant.git
-
-# Push code to GitHub
-git push -u origin main
-```
+| Resource | Free Tier Monthly / Daily Limit | Amelia Assistant Typical Usage | Free Tier Cost |
+| :--- | :--- | :--- | :--- |
+| **Cloudflare Workers** | 100,000 requests / day | 50 – 500 requests / day | **$0.00** |
+| **Cloudflare D1** | 5,000,000 row reads / day<br>100,000 row writes / day<br>5 GB total storage | ~2,000 reads / day<br>~100 writes / day<br>< 50 MB storage | **$0.00** |
+| **Cloudflare R2** | 10 GB total storage<br>1,000,000 Class A operations / mo<br>10,000,000 Class B operations / mo<br>**$0.00 Egress Fees** | < 2 GB storage<br>~500 operations / mo | **$0.00** |
+| **Cloudflare KV** | 100,000 reads / day<br>1,000 writes / day | < 50 reads / day | **$0.00** |
+| **Total Estimated Cost** | — | — | **$0.00 / month** |
 
 ---
 
-## ☁️ Deploying to Render
+## 🔐 Security Notice: Rotate Your Gemini API Key
 
-You can deploy Amelia Assistant to [Render](https://render.com) using either the **Automated Blueprint (Recommended)** or **Manual Setup**.
-
-### Method 1: Automated Deployment via `render.yaml` Blueprint (Recommended)
-
-The repository includes a ready-to-deploy `render.yaml` Blueprint that provisions both a **Web Service** and a persistent **PostgreSQL Database** automatically:
-
-1. Push your code to GitHub (as described in the GitHub section).
-2. Log in to your [Render Dashboard](https://dashboard.render.com/).
-3. Click **New +** in the top navigation and select **Blueprint**.
-4. Connect your GitHub account and select your `amelia-assistant` repository.
-5. Render will detect `render.yaml` and display the resources to create:
-   - **Service**: `amelia-assistant` (Web Service, Node.js)
-   - **Database**: `amelia-assistant-db` (PostgreSQL)
-6. Under **Environment Variables**, Render will prompt you for:
-   - `GEMINI_API_KEY`: Paste your Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey).
-7. Click **Apply**.
-8. Render will build and deploy the app with automatic HTTPS, database connection, and health monitoring!
+> [!WARNING]
+> Because your previous commit `c874b7e` on GitHub contained a `.env` file with a live API key, GitHub may have made that key visible in git history.
+>
+> We have completely removed `.env` from tracking in Git and added strict exclusion patterns in `.gitignore` so your private keys are never committed again.
+>
+> **Recommended Action**:
+> 1. Visit [Google AI Studio API Keys](https://aistudio.google.com/app/apikey).
+> 2. Delete the previously exposed key and generate a brand-new API key.
+> 3. Store the new key securely using `npx wrangler secret put GEMINI_API_KEY` on Cloudflare and in your local `.dev.vars`.
 
 ---
 
-### Method 2: Manual Setup on Render Dashboard
+## 🔍 Health Check & Diagnostics
 
-If you prefer to configure services manually:
-
-#### Step 1: Create PostgreSQL Database on Render
-1. In Render Dashboard, click **New +** → **PostgreSQL**.
-2. Name: `amelia-assistant-db`
-3. Database: `amelia_assistant`
-4. User: `amelia_user`
-5. Plan: **Free** (or Starter)
-6. Click **Create Database**.
-7. Once created, copy the **Internal Database URL** (e.g., `postgresql://amelia_user:password@dpg-xxx:5432/amelia_assistant`).
-
-#### Step 2: Create Web Service on Render
-1. Click **New +** → **Web Service**.
-2. Connect your GitHub repository `amelia-assistant`.
-3. Configure the following settings:
-   - **Name**: `amelia-assistant`
-   - **Region**: Same region as your database (e.g., Oregon)
-   - **Branch**: `main`
-   - **Runtime**: `Node`
-   - **Build Command**: `pnpm install && pnpm build`
-   - **Start Command**: `pnpm start`
-   - **Plan**: `Free`
-4. Scroll to **Environment Variables** and add:
-   - `NODE_ENV`: `production`
-   - `GEMINI_API_KEY`: `<Your Google Gemini API Key>`
-   - `GEMINI_MODEL`: `gemini-3.5-flash-lite`
-   - `DATABASE_URL`: `<Paste your PostgreSQL Internal Database URL from Step 1>`
-5. Under **Health Check Path**, enter: `/api/health`
-6. Click **Create Web Service**.
-
----
-
-## 🔍 Health Check & Monitoring
-
-Amelia Assistant includes a dedicated health check endpoint:
+Amelia Assistant includes a real-time health check endpoint:
 ```
 GET /api/health
 ```
-Response:
+
+Sample JSON response:
 ```json
 {
   "status": "ok",
   "service": "amelia-assistant",
-  "timestamp": "2026-11-04T02:00:00.000Z",
-  "uptime": 142.5,
-  "database": "postgresql",
+  "timestamp": "2026-11-04T06:30:00.000Z",
+  "runtime": {
+    "platform": "cloudflare",
+    "node_version": "v22.13.5",
+    "uptime": 24.1
+  },
+  "database": {
+    "type": "d1",
+    "connected": true
+  },
+  "storage": {
+    "type": "r2",
+    "configured": true
+  },
   "gemini": {
     "configured": true,
-    "model": "gemini-3.5-flash-lite"
+    "model": "gemini-2.5-flash"
   }
 }
 ```
 
 ---
 
-## 🔒 Security & Privacy Guarantees
-
-- **Zero Secret Leaks**: `GEMINI_API_KEY` and `DATABASE_URL` are strictly server-side environment variables. They are never sent to client browsers or bundled in JavaScript chunks.
-- **Strict `.gitignore`**: Database files (`*.db`, `*.sqlite`) and local environment files (`.env*`) are excluded from source control.
-- **Permanent Data Erasure**: Deleting a conversation in the interface performs a real database `DELETE` query, ensuring erased conversations and attachments never reappear on refresh.
-- **Private Communication**: We never link to third-party social media accounts. You maintain complete control over all data.
-
----
-
-## 📁 Repository Structure
+## 📁 Project Structure
 
 ```
-amelia-assistant/
-├── .env.example              # Safe environment variable template
-├── .gitignore                # Comprehensive exclusions (secrets, DBs, logs)
-├── render.yaml               # Render Blueprint (Web service + PostgreSQL)
-├── package.json              # Project dependencies (pg, @google/genai, lucide)
-├── tsconfig.json             # TypeScript compiler settings
-├── tailwind.config.ts        # White and romantic pink styling palette
+Ameilia-Ai/
+├── .dev.vars.example         # Template for local Cloudflare Worker secrets
+├── .env.example              # Template for standard environment variables
+├── .gitignore                # Protects secrets, build outputs, and local DBs
+├── cloudflare-env.d.ts       # TypeScript bindings for D1, R2, and KV
+├── migrations/
+│   └── 0001_initial_schema.sql # D1 database schema for all 7 application tables
+├── next.config.mjs           # Next.js config with OpenNext dev bindings
+├── open-next.config.ts       # OpenNext Cloudflare adapter configuration
+├── package.json              # Cloudflare & Next.js dependencies and scripts
+├── pnpm-workspace.yaml       # Monorepo and native build approvals
+├── public/                   # Static icons and service worker
+├── render.yaml.bak           # Archived Render blueprint (safe backup)
 ├── src/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── chat/         # Unified chat endpoint & multi-chat management
-│   │   │   │   ├── route.ts      # GET (list/filter), POST (send), DELETE, PATCH
-│   │   │   │   └── [id]/route.ts # GET messages, DELETE convo, PATCH rename/archive
-│   │   │   ├── health/       # Render health check endpoint
+│   │   │   ├── chat/         # Unified chat endpoint & conversation management
+│   │   │   ├── cron/         # Cloudflare Cron Trigger endpoint (/api/cron/reminders)
+│   │   │   ├── health/       # Health diagnostic endpoint
+│   │   │   ├── media/        # R2 upload & private streaming (/api/media/[key])
 │   │   │   ├── memories/     # Relationship memories CRUD
-│   │   │   ├── dates/        # Important countdown dates
-│   │   │   ├── reminders/    # Check-in tracker & notifications
-│   │   │   └── settings/     # Authentic voice profile & configurations
-│   │   ├── layout.tsx        # App root layout with Navbar
-│   │   └── page.tsx          # Main Amelia AI chat interface (Sidebar + Chat)
-│   ├── components/
-│   │   ├── Navbar.tsx            # Header navigation & status badge
-│   │   ├── ReplyCard.tsx         # 3-5 ready-to-send text suggestions with copy
-│   │   ├── MediaPreview.tsx      # Multi-media preview & staging
-│   │   ├── VirtualDatesModal.tsx # LDR virtual date idea generator
-│   │   ├── MemoriesModal.tsx     # Relationship memories dialog
-│   │   └── RemindersModal.tsx    # Scheduled reminders & desktop alerts
+│   │   │   ├── dates/        # Countdown dates & milestones
+│   │   │   └── settings/     # Voice customization & user preferences
+│   │   ├── layout.tsx        # App root layout with romantic pink theme
+│   │   └── page.tsx          # Main Amelia AI chat interface & sidebar
+│   ├── components/           # UI components (cards, dialogs, modals, previews)
 │   └── lib/
-│       ├── db.ts             # Dual-database adapter (PostgreSQL & SQLite)
-│       ├── gemini.ts         # Official @google/genai SDK client & thinking config
-│       ├── media-handler.ts  # Audio/video/photo file processor
-│       └── types.ts          # TypeScript type definitions
-└── data/
-    └── .gitkeep              # Local SQLite database directory
+│       ├── db.ts             # Triple database adapter (Cloudflare D1, SQLite, PG)
+│       ├── gemini.ts         # Google GenAI SDK client & thinking depth logic
+│       ├── r2.ts             # Cloudflare R2 upload, fetch, and cleanup
+│       └── types.ts          # Core TypeScript types
+├── tailwind.config.ts        # Romantic white & soft pink design system
+├── tsconfig.json             # TypeScript compiler settings
+└── wrangler.jsonc            # Cloudflare Workers, D1, R2, and Cron configuration
 ```
 
 ---
 
-## 💡 Troubleshooting
-
-### Conversations Not Saving on Free Render Restarts?
-- Free Render web service disks are ephemeral. Ensure `DATABASE_URL` is configured to connect to **Render PostgreSQL** (provided automatically via `render.yaml`).
-- Once `DATABASE_URL` is set, all conversations, messages, and memories persist indefinitely across redeploys.
-
-### Gemini API Rate Limits or Errors?
-- Ensure your API key has available quota at [Google AI Studio](https://aistudio.google.com/).
-- In your settings or `.env`, you can use `gemini-3.5-flash-lite` for high throughput and fast responses.
+## 💖 Need Help?
+If you run into any issues during deployment, check your Cloudflare Dashboard deployment logs under **Compute (Workers & Pages)** → **Your Worker** → **Deployments**.
