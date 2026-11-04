@@ -1,0 +1,32 @@
+# ========================================================
+# Render Blueprint Specification for Amelia Assistant
+# Docs: https://render.com/docs/blueprint-spec
+# ========================================================
+
+services:
+  - type: web
+    name: amelia-assistant
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: pnpm install && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: GEMINI_API_KEY
+        sync: false # Secure prompt in Render UI during first deploy
+      - key: DATABASE_URL
+        fromDatabase:
+          name: amelia-assistant-db
+          property: connectionString
+
+databases:
+  - name: amelia-assistant-db
+    databaseName: amelia_assistant
+    user: amelia_user
+    plan: free
+    region: oregon
