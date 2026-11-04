@@ -2,6 +2,7 @@
   "name": "ameilia-ai",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "npm@10.9.2",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -18,7 +19,7 @@
     "@opennextjs/cloudflare": "^1.20.15",
     "clsx": "^2.1.1",
     "lucide-react": "^1.16.0",
-    "next": "15.2.1",
+    "next": "^15.5.29",
     "pg": "^8.23.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

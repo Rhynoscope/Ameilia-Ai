@@ -97,7 +97,7 @@ Open `wrangler.jsonc` in your code editor and update the `database_id` field wit
 ### Step 3: Run Database Migrations
 Apply the initial table schemas (conversations, messages, memories, dates, reminders) to your Cloudflare D1 database:
 ```bash
-pnpm run d1:migrate:remote
+npm run d1:migrate:remote
 ```
 *(Or run `npx wrangler d1 execute amelia-assistant-db --remote --file=./migrations/0001_initial_schema.sql`)*
 
@@ -142,7 +142,7 @@ The easiest way to host and auto-deploy Amelia Assistant is via **Cloudflare Wor
 5. Choose **Connect to Git** and select your GitHub repository (`Rhynoscope/Ameilia-Ai`).
 6. Configure the build settings:
    - **Framework preset**: `OpenNext (Next.js)` (or `None`)
-   - **Build command**: `pnpm run build:worker` *(or `npx @opennextjs/cloudflare build`)*
+   - **Build command**: `npm run build:worker` *(or `npx @opennextjs/cloudflare build`)*
    - **Deploy command**: `npx wrangler deploy`
    - **Root directory**: `/`
 7. Under **Bindings**:
@@ -160,7 +160,7 @@ Cloudflare will automatically build and publish your site with a custom `*.worke
 ### Alternative: Deploy Directly from Your Terminal
 If you prefer deploying directly from your computer without configuring Git CI/CD:
 ```bash
-pnpm run deploy
+npm run deploy
 ```
 This builds the Next.js worker bundle via `@opennextjs/cloudflare` and deploys it immediately to your Cloudflare account.
 
@@ -172,7 +172,7 @@ You can run Amelia Assistant locally on your machine with full functionality:
 
 ```bash
 # 1. Install dependencies
-pnpm install
+npm install
 
 # 2. Copy the development variables template
 cp .dev.vars.example .dev.vars
@@ -181,7 +181,7 @@ cp .dev.vars.example .dev.vars
 # GEMINI_API_KEY=your_key_here
 
 # 4. Start the Next.js development server
-pnpm dev
+npm run dev
 ```
 Open `http://localhost:3000` in your web browser. Local data is automatically persisted to `./data/amelia.db` using Node.js SQLite with zero setup.
 
