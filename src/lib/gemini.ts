@@ -15,11 +15,25 @@ import {
 import { DEFAULT_COMMUNICATION_PROFILE } from "./constants";
 
 export function getGeminiModel(): string {
+  let model: string | undefined;
   try {
     const ctx = getCloudflareContext();
-    if ((ctx?.env as any)?.GEMINI_MODEL) return (ctx.env as any).GEMINI_MODEL;
+    if ((ctx?.env as any)?.GEMINI_MODEL) model = (ctx.env as any).GEMINI_MODEL;
   } catch {}
-  return process.env.GEMINI_MODEL || getSettingSync<string>("gemini_model", "gemini-3.5-flash-lite");
+  if (!model) {
+    model = process.env.GEMINI_MODEL || getSettingSync<string>("gemini_model", "gemini-3.5-flash-lite");
+  }
+  // Automatically migrate discontinued or unavailable legacy models
+  if (
+    !model ||
+    model === "gemini-2.5-flash" ||
+    model === "gemini-1.5-flash" ||
+    model === "gemini-1.5-pro" ||
+    model === "gemini-2.0-flash"
+  ) {
+    return "gemini-3.5-flash-lite";
+  }
+  return model;
 }
 
 export function getGeminiApiKey(): string | undefined {
@@ -166,19 +180,34 @@ export async function testGeminiConnection(): Promise<{
   }
 
   const start = Date.now();
+  let effectiveModel = model;
   try {
-    const response = await client.interactions.create({
-      model,
-      input: "Ping. Respond with one word: 'Connected'.",
-      system_instruction: "You are a test ping responder. Respond only with 'Connected'.",
-    });
+    let response;
+    try {
+      response = await client.interactions.create({
+        model: effectiveModel,
+        input: "Ping. Respond with one word: 'Connected'.",
+        system_instruction: "You are a test ping responder. Respond only with 'Connected'.",
+      });
+    } catch (primaryErr: any) {
+      if (effectiveModel !== "gemini-3.5-flash-lite") {
+        effectiveModel = "gemini-3.5-flash-lite";
+        response = await client.interactions.create({
+          model: effectiveModel,
+          input: "Ping. Respond with one word: 'Connected'.",
+          system_instruction: "You are a test ping responder. Respond only with 'Connected'.",
+        });
+      } else {
+        throw primaryErr;
+      }
+    }
 
     const latencyMs = Date.now() - start;
     return {
       success: true,
-      model,
+      model: effectiveModel,
       latencyMs,
-      message: `Gemini API connected successfully! (${model}, latency: ${latencyMs}ms)`,
+      message: `Gemini API connected successfully! (${effectiveModel}, latency: ${latencyMs}ms)`,
       isDemo: false,
     };
   } catch (err: any) {
@@ -282,12 +311,22 @@ If analyzing media (images, audio, video), clearly explain what you perceive and
         generation_config: generationConfig,
       });
     } catch (confErr: any) {
-      // Graceful fallback if model does not support specific thinking level parameter
-      response = await client.interactions.create({
-        model,
-        input: inputParts,
-        system_instruction: systemInstruction,
-      });
+      const errMsg = confErr?.message || String(confErr);
+      if (model !== "gemini-3.5-flash-lite" && (errMsg.includes("no longer available") || errMsg.includes("404") || errMsg.includes("503") || errMsg.includes("UNAVAILABLE"))) {
+        console.warn(`Primary model ${model} failed, falling back to gemini-3.5-flash-lite:`, errMsg);
+        response = await client.interactions.create({
+          model: "gemini-3.5-flash-lite",
+          input: inputParts,
+          system_instruction: systemInstruction,
+        });
+      } else {
+        // Graceful fallback if model does not support specific thinking level parameter
+        response = await client.interactions.create({
+          model,
+          input: inputParts,
+          system_instruction: systemInstruction,
+        });
+      }
     }
 
     const replyText = response.output_text || "I'm right here with you. What's on your mind regarding Amelia?";
