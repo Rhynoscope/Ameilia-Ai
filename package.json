@@ -12,7 +12,11 @@
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "d1:migrate:local": "wrangler d1 execute amelia-assistant-db --local --file=./migrations/0001_initial_schema.sql",
     "d1:migrate:remote": "wrangler d1 execute amelia-assistant-db --remote --file=./migrations/0001_initial_schema.sql",
-    "lint": "next lint"
+    "lint": "next lint",
+    "dev:vinext": "vite dev --port 3001",
+    "build:vinext": "vite build",
+    "start:vinext": "wrangler dev --config wrangler.vinext.jsonc",
+    "deploy:vinext": "vinext-cloudflare deploy --config wrangler.vinext.jsonc"
   },
   "dependencies": {
     "@google/genai": "^2.32.0",
@@ -21,10 +25,13 @@
     "lucide-react": "^1.16.0",
     "next": "^15.5.29",
     "pg": "^8.23.1",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "latest",
+    "react-dom": "latest",
     "tailwind-merge": "^3.0.2",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "vinext": "latest",
+    "react-server-dom-webpack": "latest",
+    "@vinext/cloudflare": "latest"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",
@@ -36,6 +43,11 @@
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",
-    "wrangler": "^4.156.2"
-  }
+    "wrangler": "^4.156.2",
+    "vite": "latest",
+    "@vitejs/plugin-react": "latest",
+    "@vitejs/plugin-rsc": "latest",
+    "@cloudflare/vite-plugin": "1"
+  },
+  "type": "module"
 }
