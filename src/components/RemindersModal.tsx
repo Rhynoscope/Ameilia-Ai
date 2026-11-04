@@ -49,7 +49,7 @@ export function RemindersModal({ isOpen, onClose, onCheckinSuccess }: RemindersM
   const fetchData = async () => {
     try {
       const res = await fetch("/api/reminders");
-      const data = await res.json();
+      const data: any = await res.json();
       if (data.settings) {
         setSettings(data.settings);
         setScheduledTimes(
@@ -86,7 +86,7 @@ export function RemindersModal({ isOpen, onClose, onCheckinSuccess }: RemindersM
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "checkin", notes: quickNote.trim() || "Sent text message" }),
       });
-      const data = await res.json();
+      const data: any = await res.json();
       if (data.stats) setStats(data.stats);
       setQuickNote("");
       if (onCheckinSuccess) onCheckinSuccess();

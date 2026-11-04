@@ -1,8 +1,8 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "ameilia-ai",
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "amelia-assistant",
   "main": ".open-next/worker.js",
-  "compatibility_date": "2024-11-01",
+  "compatibility_date": "2026-11-04",
   "compatibility_flags": [
     "nodejs_compat"
   ],
@@ -10,31 +10,29 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "amelia-assistant-db",
-      "database_id": "00000000-0000-0000-0000-000000000000"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "MEDIA_BUCKET",
-      "bucket_name": "amelia-assistant-media"
-    }
-  ],
-  "kv_namespaces": [
-    {
-      "binding": "KV",
-      "id": "00000000000000000000000000000000"
-    }
-  ],
-  "triggers": {
-    "crons": [
-      "0 14,18,21 * * *"
-    ]
-  },
   "observability": {
     "enabled": true
   }
+  // Optional: Cloudflare D1 Database binding
+  // Once created via `npx wrangler d1 create amelia-assistant-db`, add your database_id or bind in Cloudflare Dashboard:
+  // "d1_databases": [
+  //   {
+  //     "binding": "DB",
+  //     "database_name": "amelia-assistant-db",
+  //     "database_id": "YOUR_ACTUAL_D1_DATABASE_ID"
+  //   }
+  // ],
+  // Optional: Cloudflare R2 Media Bucket binding
+  // "r2_buckets": [
+  //   {
+  //     "binding": "MEDIA_BUCKET",
+  //     "bucket_name": "amelia-assistant-media"
+  //   }
+  // ],
+  // Optional: Cloudflare Cron Triggers for scheduled reminders
+  // "triggers": {
+  //   "crons": [
+  //     "0 14,18,21 * * *"
+  //   ]
+  // }
 }

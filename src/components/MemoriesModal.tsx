@@ -57,7 +57,7 @@ export function MemoriesModal({ isOpen, onClose }: MemoriesModalProps) {
       if (category !== "all") url += `category=${encodeURIComponent(category)}&`;
       if (search.trim()) url += `search=${encodeURIComponent(search.trim())}&`;
       const res = await fetch(url);
-      const data = await res.json();
+      const data: any = await res.json();
       if (data.memories) setMemories(data.memories);
     } catch (e) {
       console.error(e);

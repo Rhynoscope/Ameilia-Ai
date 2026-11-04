@@ -34,7 +34,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body: any = await req.json();
     const { model, profile, reminderSettings, theme, privacyAcknowledged } = body;
 
     if (model) {

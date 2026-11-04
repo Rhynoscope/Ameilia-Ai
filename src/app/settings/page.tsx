@@ -50,7 +50,7 @@ export default function SettingsPage() {
   const fetchSettings = async () => {
     try {
       const res = await fetch("/api/settings");
-      const data = await res.json();
+      const data: any = await res.json();
       if (data.model) setModel(data.model);
       if (data.profile) setProfile(data.profile);
       if (data.reminderSettings) setReminderSettings(data.reminderSettings);
@@ -67,7 +67,7 @@ export default function SettingsPage() {
     setTestResult(null);
     try {
       const res = await fetch("/api/gemini/test", { method: "POST" });
-      const data = await res.json();
+      const data: any = await res.json();
       setTestResult(data);
       if (data.success) {
         setHasApiKey(true);

@@ -38,7 +38,7 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const body = await req.json();
+    const body: any = await req.json();
     const { title, archived } = body;
 
     if (typeof title === "string" && title.trim().length > 0) {

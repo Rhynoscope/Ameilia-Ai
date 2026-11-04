@@ -6,7 +6,7 @@ export const maxDuration = 60; // Allow sufficient time for multimodal analysis
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body: any = await req.json();
     const { images, userNotes, preferences } = body;
 
     if (!images || !Array.isArray(images) || images.length === 0) {

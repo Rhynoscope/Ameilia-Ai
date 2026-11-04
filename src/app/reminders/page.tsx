@@ -43,7 +43,7 @@ export default function RemindersPage() {
   const fetchRemindersData = async () => {
     try {
       const res = await fetch("/api/reminders");
-      const data = await res.json();
+      const data: any = await res.json();
       if (data.settings) {
         setSettings(data.settings);
         const times = generateDailyRandomSchedule(
@@ -87,7 +87,7 @@ export default function RemindersPage() {
           notes: quickNotes.trim() || "Sent text message to Amelia",
         }),
       });
-      const data = await res.json();
+      const data: any = await res.json();
       if (data.stats) setStats(data.stats);
       setQuickNotes("");
       fetchRemindersData();

@@ -4,7 +4,7 @@ import { IMPROVEMENT_STYLES } from "@/lib/constants";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body: any = await req.json();
     const { message, styleId, customInstruction } = body;
 
     if (!message || typeof message !== "string" || message.trim().length === 0) {

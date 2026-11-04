@@ -3,7 +3,7 @@ import { savePushSubscription } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body: any = await req.json();
     const { endpoint, keys } = body;
 
     if (!endpoint || !keys || !keys.p256dh || !keys.auth) {

@@ -11,7 +11,7 @@ export function DemoModeBanner({ onOpenSettings }: { onOpenSettings?: () => void
   useEffect(() => {
     fetch("/api/gemini/test")
       .then((r) => r.json())
-      .then((d) => setStatus({ configured: d.configured, model: d.model }))
+      .then((d: any) => setStatus({ configured: d.configured, model: d.model }))
       .catch(() => setStatus({ configured: false, model: "gemini-3.5-flash-lite" }));
   }, []);
 

@@ -31,7 +31,7 @@ export default function ImportantDatesPage() {
   const fetchDates = async () => {
     try {
       const res = await fetch("/api/dates");
-      const data = await res.json();
+      const data: any = await res.json();
       if (data.dates) setDates(data.dates);
     } catch (e) {
       console.error(e);

@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Handle JSON base64 upload
-    const body = await req.json();
+    const body: any = await req.json();
     const { name, mimeType, category, data } = body;
 
     if (!data || !name) {

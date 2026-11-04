@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body: any = await req.json();
     const {
       conversationId,
       message,
@@ -142,7 +142,7 @@ export async function DELETE() {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body: any = await req.json();
     const { action, archived } = body;
     if (action === "archive_all") {
       await archiveAllConversations(Boolean(archived));

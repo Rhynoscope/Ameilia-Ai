@@ -35,14 +35,14 @@ export function Navbar() {
   useEffect(() => {
     fetch("/api/reminders")
       .then((r) => r.json())
-      .then((d) => {
+      .then((d: any) => {
         if (d.stats?.streakDays) setStreakDays(d.stats.streakDays);
       })
       .catch(() => {});
 
     fetch("/api/settings")
       .then((r) => r.json())
-      .then((d) => setHasApiKey(Boolean(d.hasKey)))
+      .then((d: any) => setHasApiKey(Boolean(d.hasKey)))
       .catch(() => {});
   }, []);
 

@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body: any = await req.json();
     const { category, title, content, emotional_significance, source } = body;
 
     if (!category || !title || !content) {
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body: any = await req.json();
     const { id, category, title, content, emotional_significance } = body;
 
     if (!id) {

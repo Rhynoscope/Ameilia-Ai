@@ -229,7 +229,7 @@ export default function AmeliaAICentralChat() {
       }
 
       const res = await fetch(`/api/chat?${params.toString()}`);
-      const data = await res.json();
+      const data: any = await res.json();
       const list: ConversationSummary[] = data.conversations || [];
       setConversations(list);
 
@@ -255,7 +255,7 @@ export default function AmeliaAICentralChat() {
   const loadMessages = async (id: string) => {
     try {
       const res = await fetch(`/api/chat/${id}`);
-      const data = await res.json();
+      const data: any = await res.json();
       if (data.messages && data.messages.length > 0) {
         setMessages(data.messages);
       } else {
@@ -455,7 +455,7 @@ How can I help you and Amelia today?`,
         }),
       });
 
-      const data = await res.json();
+      const data: any = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Failed to communicate with Amelia AI");
       }

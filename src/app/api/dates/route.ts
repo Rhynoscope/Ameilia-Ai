@@ -12,7 +12,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body: any = await req.json();
     const { title, event_date, category, reminder_days_before, notes, is_recurring_yearly } = body;
 
     if (!title || !event_date) {

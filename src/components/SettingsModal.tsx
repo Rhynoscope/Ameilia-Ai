@@ -42,7 +42,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const loadSettings = async () => {
     try {
       const res = await fetch("/api/settings");
-      const data = await res.json();
+      const data: any = await res.json();
       if (data.model) setModel(data.model);
       if (data.profile) setProfile(data.profile);
       setHasApiKey(Boolean(data.hasKey));
@@ -56,7 +56,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setTestResult(null);
     try {
       const res = await fetch("/api/gemini/test", { method: "POST" });
-      const data = await res.json();
+      const data: any = await res.json();
       setTestResult(data);
       if (data.success) setHasApiKey(true);
     } catch (e) {

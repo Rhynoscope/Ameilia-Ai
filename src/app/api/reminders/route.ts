@@ -31,7 +31,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body: any = await req.json();
     const { action, id, notes, settings, scheduled_time, prompt_message } = body;
 
     if (action === "checkin") {

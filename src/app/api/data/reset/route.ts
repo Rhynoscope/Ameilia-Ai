@@ -3,7 +3,7 @@ import { resetData } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body: any = await req.json();
     const { target } = body; // 'chat' | 'all'
 
     if (target === "chat") {

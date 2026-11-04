@@ -1,7 +1,7 @@
 # Amelia Assistant — Personal AI Relationship Companion & LDR Texting Coach
 
 ![Amelia Assistant](https://img.shields.io/badge/Amelia%20Assistant-Cloudflare%20Edition-ff69b4.svg)
-![Next.js](https://img.shields.io/badge/Next.js-15.2.1-black.svg)
+![Next.js](https://img.shields.io/badge/Next.js-15.5.29-black.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)
 ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers%20%26%20D1%20%26%20R2-F38020.svg)
 ![Google Gemini](https://img.shields.io/badge/Google%20Gemini-SDK%20v2.32-orange.svg)
