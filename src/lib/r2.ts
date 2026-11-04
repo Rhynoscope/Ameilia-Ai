@@ -3,10 +3,20 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 export function getR2Bucket(): any {
   try {
     const ctx = getCloudflareContext();
-    return (ctx?.env as any)?.MEDIA_BUCKET || null;
-  } catch {
-    return null;
-  }
+    if ((ctx?.env as any)?.MEDIA_BUCKET) return (ctx.env as any).MEDIA_BUCKET;
+  } catch {}
+
+  try {
+    const globalEnv = (globalThis as any).__CLOUDFLARE_ENV__;
+    if (globalEnv?.MEDIA_BUCKET) return globalEnv.MEDIA_BUCKET;
+  } catch {}
+
+  try {
+    const globalCtx = (globalThis as any)[Symbol.for("__cloudflare-context__")];
+    if (globalCtx?.env?.MEDIA_BUCKET) return globalCtx.env.MEDIA_BUCKET;
+  } catch {}
+
+  return null;
 }
 
 export function isR2Available(): boolean {

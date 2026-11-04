@@ -41,6 +41,17 @@ export function getGeminiApiKey(): string | undefined {
     const ctx = getCloudflareContext();
     if ((ctx?.env as any)?.GEMINI_API_KEY) return (ctx.env as any).GEMINI_API_KEY;
   } catch {}
+
+  try {
+    const globalEnv = (globalThis as any).__CLOUDFLARE_ENV__;
+    if (globalEnv?.GEMINI_API_KEY) return globalEnv.GEMINI_API_KEY;
+  } catch {}
+
+  try {
+    const globalCtx = (globalThis as any)[Symbol.for("__cloudflare-context__")];
+    if (globalCtx?.env?.GEMINI_API_KEY) return globalCtx.env.GEMINI_API_KEY;
+  } catch {}
+
   return process.env.GEMINI_API_KEY || undefined;
 }
 

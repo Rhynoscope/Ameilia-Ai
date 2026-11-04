@@ -123,9 +123,19 @@ export async function POST(req: NextRequest) {
       thinkingMode: thinkingMode || "normal",
     });
   } catch (err: any) {
-    console.error("Chat API error:", err);
+    const rawMsg = err?.message || String(err);
+    const isGeminiError = rawMsg.includes("Gemini") || rawMsg.includes("GoogleGenAI") || rawMsg.includes("interactions");
+    const isDbError = rawMsg.includes("D1") || rawMsg.includes("database") || rawMsg.includes("prepare") || rawMsg.includes("sqlite") || rawMsg.includes("settings");
+    const isPermError = rawMsg.includes("permission") || rawMsg.includes("not permitted") || rawMsg.includes("EPERM");
+
+    let prefix = "";
+    if (isDbError) prefix = "[Database Error] ";
+    else if (isPermError) prefix = "[Permission Error] ";
+    else if (isGeminiError) prefix = "[Gemini Error] ";
+
+    console.error(`[Chat API error]: ${prefix}${rawMsg}`);
     return NextResponse.json(
-      { error: err.message || "Failed to process chat with Amelia AI" },
+      { error: `${prefix}${rawMsg || "Failed to process chat with Amelia AI"}` },
       { status: 500 }
     );
   }

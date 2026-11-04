@@ -474,11 +474,24 @@ How can I help you and Amelia today?`,
       setMessages((prev) => [...prev, assistantMsg]);
       loadConversations(activeConvoId);
     } catch (err: any) {
+      const errMsg = err?.message || String(err);
+      let userNotice = "";
+
+      if (errMsg.toLowerCase().includes("database") || errMsg.toLowerCase().includes("d1") || errMsg.toLowerCase().includes("sqlite")) {
+        userNotice = `Database error: ${errMsg}. Please verify your storage configuration.`;
+      } else if (errMsg.toLowerCase().includes("permission") || errMsg.toLowerCase().includes("not permitted")) {
+        userNotice = `Storage permission error: ${errMsg}. Storage bindings must use Cloudflare D1 or in-memory persistence.`;
+      } else if (errMsg.toLowerCase().includes("api key") || errMsg.toLowerCase().includes("gemini")) {
+        userNotice = `Gemini AI service error: ${errMsg}. Please verify your GEMINI_API_KEY.`;
+      } else {
+        userNotice = `Assistant request error: ${errMsg}. Please check your connection and try again.`;
+      }
+
       const errorMsg: ChatMessage = {
         id: Date.now() + 2,
         conversation_id: activeConvoId,
         role: "assistant",
-        content: `I ran into an issue connecting with Google Gemini: ${err.message}. Please check your connection and try again.`,
+        content: userNotice,
         created_at: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);

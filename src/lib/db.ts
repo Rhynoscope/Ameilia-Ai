@@ -24,10 +24,20 @@ let _schemaInitialized = false;
 export function getD1(): any {
   try {
     const ctx = getCloudflareContext();
-    return (ctx?.env as any)?.DB || null;
-  } catch {
-    return null;
-  }
+    if ((ctx?.env as any)?.DB) return (ctx.env as any).DB;
+  } catch {}
+
+  try {
+    const globalEnv = (globalThis as any).__CLOUDFLARE_ENV__;
+    if (globalEnv?.DB) return globalEnv.DB;
+  } catch {}
+
+  try {
+    const globalCtx = (globalThis as any)[Symbol.for("__cloudflare-context__")];
+    if (globalCtx?.env?.DB) return globalCtx.env.DB;
+  } catch {}
+
+  return null;
 }
 
 export function isD1Active(): boolean {
@@ -65,15 +75,20 @@ function getPgPool() {
 async function getSqlite(): Promise<any> {
   if (!_sqliteDb) {
     const { DatabaseSync } = await import("node:sqlite");
-    const path = await import("node:path");
-    const fs = await import("node:fs");
-    const dbDir = path.join(process.cwd(), "data");
-    const dbPath = path.join(dbDir, "amelia.db");
+    try {
+      const path = await import("node:path");
+      const fs = await import("node:fs");
+      const dbDir = path.join(process.cwd(), "data");
+      const dbPath = path.join(dbDir, "amelia.db");
 
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true });
+      if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true });
+      }
+      _sqliteDb = new DatabaseSync(dbPath);
+    } catch (fsErr: any) {
+      console.warn("[Database] Local filesystem write not permitted in worker runtime, using resilient in-memory SQLite storage.");
+      _sqliteDb = new DatabaseSync(":memory:");
     }
-    _sqliteDb = new DatabaseSync(dbPath);
   }
   return _sqliteDb;
 }
