@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body: any = await req.json();
-    const { category, title, content, emotional_significance, source } = body;
+    const { category, title, content, emotional_significance, approx_date, status, source_type, related_keys, source } = body;
 
     if (!category || !title || !content) {
       return NextResponse.json(
@@ -31,6 +31,10 @@ export async function POST(req: NextRequest) {
       title,
       content,
       emotional_significance,
+      approx_date,
+      status: status || "confirmed",
+      source_type: source_type || "her_statement",
+      related_keys,
       source: source || "manual",
     });
 
@@ -43,13 +47,22 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body: any = await req.json();
-    const { id, category, title, content, emotional_significance } = body;
+    const { id, category, title, content, emotional_significance, approx_date, status, source_type, related_keys } = body;
 
     if (!id) {
       return NextResponse.json({ error: "Memory ID is required" }, { status: 400 });
     }
 
-    await updateMemory(id, { category, title, content, emotional_significance });
+    await updateMemory(id, {
+      category,
+      title,
+      content,
+      emotional_significance,
+      approx_date,
+      status,
+      source_type,
+      related_keys
+    });
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

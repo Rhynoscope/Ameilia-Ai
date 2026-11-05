@@ -43,18 +43,35 @@ export interface CommunicationProfile {
 }
 
 export type MemoryCategory =
+  | "Core Profile & Basics"
   | "Interests"
   | "Hobbies"
   | "Favorite Things"
+  | "Favorite Games"
+  | "Favorite Animals"
+  | "Favorite Foods & Drinks"
+  | "Dislikes & Pet Peeves"
+  | "Personal Boundaries"
+  | "Inside Jokes & Playful Banter"
+  | "Important Conversations"
+  | "Things She Told Me"
+  | "Family & Friends"
+  | "Work & School"
+  | "Daily Habits"
+  | "Promises Made"
+  | "Future Plans & Goals"
+  | "Topics She Enjoys"
+  | "Special Memories"
+  | "Relationship Milestones"
+  | "Communication Preferences"
+  // Legacy aliases for backward compatibility
   | "Dislikes"
   | "Important Dates"
   | "Favorite Foods"
-  | "Inside Jokes"
-  | "Important Conversations"
-  | "Things She Told Me"
-  | "Promises Made"
-  | "Topics She Enjoys"
-  | "Special Memories";
+  | "Inside Jokes";
+
+export type MemoryStatus = "confirmed" | "preference" | "promise" | "goal" | "uncertain";
+export type MemorySourceType = "her_statement" | "user_supplied";
 
 export interface MemoryItem {
   id: number;
@@ -62,6 +79,10 @@ export interface MemoryItem {
   title: string;
   content: string;
   emotional_significance?: string;
+  approx_date?: string;
+  status?: MemoryStatus;
+  source_type?: MemorySourceType;
+  related_keys?: string;
   source: "manual" | "ai_extracted";
   created_at: string;
   updated_at: string;

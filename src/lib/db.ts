@@ -182,7 +182,7 @@ export async function ensureSchema() {
     // Cloudflare D1 Schema
     await d1.batch([
       d1.prepare(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);`),
-      d1.prepare(`CREATE TABLE IF NOT EXISTS memories (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, emotional_significance TEXT, source TEXT DEFAULT 'manual', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`),
+      d1.prepare(`CREATE TABLE IF NOT EXISTS memories (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, emotional_significance TEXT, approx_date TEXT, status TEXT DEFAULT 'confirmed', source_type TEXT DEFAULT 'her_statement', related_keys TEXT, source TEXT DEFAULT 'manual', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`),
       d1.prepare(`CREATE TABLE IF NOT EXISTS important_dates (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, event_date TEXT NOT NULL, category TEXT NOT NULL, reminder_days_before INTEGER DEFAULT 7, notes TEXT, is_recurring_yearly INTEGER DEFAULT 1, created_at TEXT NOT NULL);`),
       d1.prepare(`CREATE TABLE IF NOT EXISTS reminder_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, scheduled_time TEXT NOT NULL, prompt_message TEXT NOT NULL, status TEXT DEFAULT 'pending', completed_at TEXT, notes TEXT, created_at TEXT NOT NULL);`),
       d1.prepare(`CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, archived INTEGER DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`),
@@ -204,6 +204,10 @@ export async function ensureSchema() {
           title TEXT NOT NULL,
           content TEXT NOT NULL,
           emotional_significance TEXT,
+          approx_date TEXT,
+          status TEXT DEFAULT 'confirmed',
+          source_type TEXT DEFAULT 'her_statement',
+          related_keys TEXT,
           source TEXT DEFAULT 'manual',
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
@@ -274,6 +278,10 @@ export async function ensureSchema() {
         title TEXT NOT NULL,
         content TEXT NOT NULL,
         emotional_significance TEXT,
+        approx_date TEXT,
+        status TEXT DEFAULT 'confirmed',
+        source_type TEXT DEFAULT 'her_statement',
+        related_keys TEXT,
         source TEXT DEFAULT 'manual',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -330,6 +338,12 @@ export async function ensureSchema() {
     `);
   }
 
+  // Safe migration for expanded memory columns on existing tables
+  try { await executeRun("ALTER TABLE memories ADD COLUMN approx_date TEXT"); } catch {}
+  try { await executeRun("ALTER TABLE memories ADD COLUMN status TEXT DEFAULT 'confirmed'"); } catch {}
+  try { await executeRun("ALTER TABLE memories ADD COLUMN source_type TEXT DEFAULT 'her_statement'"); } catch {}
+  try { await executeRun("ALTER TABLE memories ADD COLUMN related_keys TEXT"); } catch {}
+
   // Seed default settings if empty
   const countRow = await querySingle<{ count: string | number }>("SELECT COUNT(*) as count FROM settings");
   if (!countRow || Number(countRow.count) === 0) {
@@ -344,8 +358,19 @@ export async function ensureSchema() {
     const now = new Date().toISOString();
     for (const mem of INITIAL_MEMORIES) {
       await executeRun(
-        "INSERT INTO memories (category, title, content, emotional_significance, source, created_at, updated_at) VALUES (?, ?, ?, ?, 'manual', ?, ?)",
-        [mem.category, mem.title, mem.content, mem.emotional_significance, now, now]
+        "INSERT INTO memories (category, title, content, emotional_significance, approx_date, status, source_type, related_keys, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)",
+        [
+          mem.category,
+          mem.title,
+          mem.content,
+          mem.emotional_significance || "",
+          (mem as any).approx_date || "",
+          (mem as any).status || "confirmed",
+          (mem as any).source_type || "her_statement",
+          (mem as any).related_keys || "",
+          now,
+          now
+        ]
       );
     }
   }
@@ -414,9 +439,9 @@ export async function getMemories(search?: string, category?: string): Promise<M
   }
 
   if (search && search.trim().length > 0) {
-    conditions.push("(title LIKE ? OR content LIKE ? OR emotional_significance LIKE ?)");
+    conditions.push("(title LIKE ? OR content LIKE ? OR emotional_significance LIKE ? OR related_keys LIKE ? OR approx_date LIKE ?)");
     const s = `%${search.trim()}%`;
-    params.push(s, s, s);
+    params.push(s, s, s, s, s);
   }
 
   if (conditions.length > 0) {
@@ -430,9 +455,21 @@ export async function getMemories(search?: string, category?: string): Promise<M
 export async function addMemory(item: Omit<MemoryItem, "id" | "created_at" | "updated_at">): Promise<MemoryItem> {
   const now = new Date().toISOString();
   await executeRun(`
-    INSERT INTO memories (category, title, content, emotional_significance, source, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `, [item.category, item.title, item.content, item.emotional_significance || "", item.source || "manual", now, now]);
+    INSERT INTO memories (category, title, content, emotional_significance, approx_date, status, source_type, related_keys, source, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    item.category,
+    item.title,
+    item.content,
+    item.emotional_significance || "",
+    item.approx_date || "",
+    item.status || "confirmed",
+    item.source_type || "her_statement",
+    item.related_keys || "",
+    item.source || "manual",
+    now,
+    now
+  ]);
 
   const created = await querySingle<MemoryItem>("SELECT * FROM memories ORDER BY id DESC LIMIT 1");
   return created || {
@@ -451,9 +488,24 @@ export async function updateMemory(id: number, item: Partial<MemoryItem>): Promi
         title = COALESCE(?, title),
         content = COALESCE(?, content),
         emotional_significance = COALESCE(?, emotional_significance),
+        approx_date = COALESCE(?, approx_date),
+        status = COALESCE(?, status),
+        source_type = COALESCE(?, source_type),
+        related_keys = COALESCE(?, related_keys),
         updated_at = ?
     WHERE id = ?
-  `, [item.category, item.title, item.content, item.emotional_significance, now, id]);
+  `, [
+    item.category,
+    item.title,
+    item.content,
+    item.emotional_significance,
+    item.approx_date,
+    item.status,
+    item.source_type,
+    item.related_keys,
+    now,
+    id
+  ]);
 }
 
 export async function deleteMemory(id: number): Promise<void> {
