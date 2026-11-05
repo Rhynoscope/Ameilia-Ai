@@ -14,13 +14,7 @@
     {
       "binding": "DB",
       "database_name": "amelia-assistant-db",
-      "database_id": "00000000-0000-0000-0000-000000000000"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "MEDIA_BUCKET",
-      "bucket_name": "amelia-assistant-media"
+      "database_id": "8ad25e3b-a6e7-48ef-b251-61c19c91fc11"
     }
   ],
   "observability": {

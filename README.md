@@ -67,102 +67,83 @@ npx wrangler login
 
 ---
 
-### Step 2: Create Your Cloudflare D1 Database
-Create the production serverless SQLite database:
-```bash
-npx wrangler d1 create amelia-assistant-db
-```
-The output will display something like:
-```
-✅ Successfully created DB 'amelia-assistant-db'
-[[d1_databases]]
-binding = "DB"
-database_name = "amelia-assistant-db"
-database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-```
+### Step 2: Cloudflare D1 Database (Configured & Migrated)
+The production serverless SQLite database has already been created in your Cloudflare account:
+- Database Name: `amelia-assistant-db`
+- Database ID: `8ad25e3b-a6e7-48ef-b251-61c19c91fc11`
+- Status: Initialized with all 7 schema tables (`conversations`, `messages`, `memories`, `important_dates`, `reminder_logs`, `push_subscriptions`, `settings`).
 
-Open `wrangler.jsonc` in your code editor and update the `database_id` field with your new ID:
-```jsonc
+The binding is configured directly in `wrangler.json`:
+```json
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "amelia-assistant-db",
-      "database_id": "YOUR_ACTUAL_D1_DATABASE_ID_HERE"
+      "database_id": "8ad25e3b-a6e7-48ef-b251-61c19c91fc11"
     }
-  ],
+  ]
 ```
 
----
-
-### Step 3: Run Database Migrations
-Apply the initial table schemas (conversations, messages, memories, dates, reminders) to your Cloudflare D1 database:
+To run future migrations:
 ```bash
 npm run d1:migrate:remote
 ```
-*(Or run `npx wrangler d1 execute amelia-assistant-db --remote --file=./migrations/0001_initial_schema.sql`)*
 
 ---
 
-### Step 4: Create Cloudflare R2 Media Bucket
-Create the object storage bucket for photos, videos, and voice notes:
+### Step 3: Cloudflare R2 Media Bucket (Optional)
+If you wish to store photos, videos, and voice notes in Cloudflare R2:
+1. Navigate to your [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Storage & Databases** → **R2** and click **Enable R2** (free tier includes 10 GB/month).
+2. Create your media bucket:
 ```bash
 npx wrangler r2 bucket create amelia-assistant-media
 ```
-*(The bucket name `amelia-assistant-media` matches the binding configured in `wrangler.jsonc`).*
+*(Note: If R2 is not yet enabled, the app automatically falls back to secure inline media storage without throwing errors).*
 
 ---
 
-### Step 5: Set Your Encrypted Worker Secrets
-Never commit API keys to GitHub! Instead, securely encrypt your Gemini API key in Cloudflare:
+### Step 4: Set Your Encrypted Worker Secrets
+Set your Google Gemini API key securely in Cloudflare:
 ```bash
 npx wrangler secret put GEMINI_API_KEY
 ```
 *When prompted, paste your Google Gemini API key and hit Enter.*
 
-*(Optional) If you want to customize the cron reminder security or push notifications:*
-```bash
-npx wrangler secret put CRON_SECRET
-```
-
 ---
 
-### Step 6: Connect to Cloudflare Workers Builds (Automatic CI/CD)
+### Step 5: Connect to Cloudflare Workers Builds (GitHub Auto-Deployment)
 
-The easiest way to host and auto-deploy Amelia Assistant is via **Cloudflare Workers Builds**:
+> **Why Cloudflare Pages Returned 404:**
+> Cloudflare Pages is designed for static websites and legacy `/functions`. Raw Next.js 15 App Router dynamic API routes cannot run on static Pages without an edge worker runtime. Cloudflare Workers (Workers Builds) compiles the entire application into `.open-next/worker.js`, giving you full server-side API execution (`/api/chat`, `/api/settings`, etc.) and fast asset streaming via the `ASSETS` binding.
 
+To deploy via Cloudflare Workers Builds:
 1. Push your updated code to your GitHub repository:
    ```bash
    git add .
-   git commit -m "feat: migrate to Cloudflare Workers, D1, and R2"
+   git commit -m "fix(cloudflare): migrate from Pages to Workers with OpenNext"
    git push origin main
    ```
-2. Navigate to your [Cloudflare Dashboard](https://dash.cloudflare.com/).
-3. On the left sidebar, click **Compute (Workers & Pages)**.
-4. Click **Create** → select **Workers Builds** (or Pages).
-5. Choose **Connect to Git** and select your GitHub repository (`Rhynoscope/Ameilia-Ai`).
+2. Navigate to [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Compute (Workers & Pages)**.
+3. If you previously created a **Pages** project that gave 404, delete or disconnect it.
+4. Click **Create** → select **Workers** → **Connect to Git** (Workers Builds).
+5. Select your repository: `Rhynoscope/Ameilia-Ai`.
 6. Configure the build settings:
-   - **Framework preset**: `OpenNext (Next.js)` (or `None`)
-   - **Build command**: `npm run build:worker` *(or `npx @opennextjs/cloudflare build`)*
-   - **Deploy command**: `npx wrangler deploy`
+   - **Build command**: `npm run build:worker`
+   - **Deploy command**: `npx opennextjs-cloudflare deploy` *(or `npx wrangler deploy`)*
    - **Root directory**: `/`
-7. Under **Bindings**:
-   - Bind D1 Database: Variable name `DB`, select `amelia-assistant-db`.
-   - Bind R2 Bucket: Variable name `MEDIA_BUCKET`, select `amelia-assistant-media`.
-8. Under **Settings → Variables and Secrets**:
-   - Add Secret: `GEMINI_API_KEY` with your Google Gemini API key.
-   - Add Variable (optional): `GEMINI_MODEL` with value `gemini-2.5-flash`.
-9. Click **Save and Deploy**!
-
-Cloudflare will automatically build and publish your site with a custom `*.workers.dev` URL and free SSL! Whenever you push new commits to your `main` branch, Cloudflare will automatically rebuild and deploy your changes.
+7. Under **Settings → Variables and Secrets**:
+   - Add Secret: `GEMINI_API_KEY` with your Gemini API key.
+   - Add Variable: `GEMINI_MODEL` with value `gemini-3.5-flash-lite`.
+8. Click **Save and Deploy**!
 
 ---
 
-### Alternative: Deploy Directly from Your Terminal
-If you prefer deploying directly from your computer without configuring Git CI/CD:
+### Alternative: One-Command CLI Deployment
+You can deploy directly to Cloudflare Workers from your terminal right now:
 ```bash
 npm run deploy
 ```
-This builds the Next.js worker bundle via `@opennextjs/cloudflare` and deploys it immediately to your Cloudflare account.
+This runs `opennextjs-cloudflare build` followed by `opennextjs-cloudflare deploy`, publishing your Worker instantly.
 
 ---
 
