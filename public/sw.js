@@ -1,18 +1,86 @@
-// Amelia Assistant Service Worker
-const CACHE_NAME = "amelia-assistant-v1";
+// Amelia AI Service Worker with PWA Offline Support & Push Notifications
+const CACHE_NAME = "amelia-ai-v2";
+const OFFLINE_URL = "/offline.html";
+
+const PRECACHE_ASSETS = [
+  "/offline.html",
+  "/manifest.json",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/icon-192.svg",
+  "/apple-touch-icon.png",
+];
 
 self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(PRECACHE_ASSETS);
+    })
+  );
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
+});
+
+// Fetch handler: network-first for pages with offline fallback, network-only for APIs
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // Skip non-GET requests and API calls
+  if (request.method !== "GET" || url.pathname.startsWith("/api/")) {
+    return;
+  }
+
+  // Navigation (HTML pages)
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request).catch(() => {
+        return caches.match(OFFLINE_URL);
+      })
+    );
+    return;
+  }
+
+  // Static assets (CSS, JS, images, icons)
+  if (
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname.startsWith("/icons/") ||
+    url.pathname.endsWith(".png") ||
+    url.pathname.endsWith(".svg") ||
+    url.pathname.endsWith(".ico")
+  ) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        });
+      })
+    );
+  }
 });
 
 // Handle Push event from server
 self.addEventListener("push", (event) => {
   let data = {
-    title: "Amelia Assistant",
+    title: "Ameilia AI",
     body: "Hey, have you checked in with Amelia today? ❤️",
     data: { url: "/" },
   };
@@ -47,7 +115,7 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   const action = event.action;
-  const targetUrl = action === "open_chat" ? "/chat" : (event.notification.data?.url || "/");
+  const targetUrl = action === "open_chat" ? "/" : (event.notification.data?.url || "/");
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {

@@ -199,17 +199,18 @@ export default function ImportantDatesPage() {
 
       {/* Add Date Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white border border-pink-200 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white border border-pink-200 rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90dvh] overflow-y-auto pb-[env(safe-area-inset-bottom)]">
             <div className="flex items-center justify-between pb-2 border-b border-pink-100">
-              <h3 className="font-bold text-base text-gray-900">
+              <h3 className="font-bold text-sm sm:text-base text-gray-900">
                 Add Important Relationship Date
               </h3>
               <button
                 onClick={() => setModalOpen(false)}
                 className="text-gray-400 hover:text-gray-600 p-1"
+                aria-label="Close modal"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 

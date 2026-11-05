@@ -106,13 +106,13 @@ export function MediaPreview({ attachment, onRemove, isStaging = false }: MediaP
       {modalOpen && (
         <div
           onClick={() => setModalOpen(false)}
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in cursor-zoom-out"
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-fade-in cursor-zoom-out"
         >
-          <div className="relative max-w-4xl max-h-[90vh]">
+          <div className="relative max-w-4xl max-h-[90dvh]">
             <img
               src={attachment.data}
               alt={attachment.name}
-              className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain border border-white/20"
+              className="max-w-full max-h-[85dvh] rounded-2xl shadow-2xl object-contain border border-white/20"
             />
             <button
               onClick={() => setModalOpen(false)}

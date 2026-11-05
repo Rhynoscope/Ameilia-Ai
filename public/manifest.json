@@ -1,0 +1,60 @@
+{
+  "name": "Ameilia AI",
+  "short_name": "Ameilia AI",
+  "description": "Personal AI relationship companion and long-distance texting coach",
+  "start_url": "/?source=pwa",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "categories": ["lifestyle", "social", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192 512x512 any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open AI Chat",
+      "url": "/?source=shortcut-chat",
+      "description": "Start a new conversation or ask for texting advice"
+    },
+    {
+      "name": "Relationship Memories",
+      "url": "/memories",
+      "description": "View Amelia's favorite things and moments"
+    },
+    {
+      "name": "Important Dates",
+      "url": "/dates",
+      "description": "Countdown to your next visit and anniversaries"
+    }
+  ]
+}

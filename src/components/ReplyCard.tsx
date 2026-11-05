@@ -168,7 +168,7 @@ export function ReplyCard({ reply, onPersonalized }: ReplyCardProps) {
           <button
             onClick={() => handleTransform("more_natural", "Sound Like Me")}
             disabled={Boolean(transformingStyle)}
-            className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-pink-100/70 hover:bg-pink-100 border border-pink-200 text-romantic-700 font-semibold transition flex items-center gap-1 disabled:opacity-50 ml-auto"
+            className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-pink-100/70 hover:bg-pink-100 border border-pink-200 text-romantic-700 font-semibold transition flex items-center gap-1 disabled:opacity-50"
             title="Adapt this message to match your personal texting profile"
           >
             <Sparkles className="w-3 h-3 text-romantic-500" />

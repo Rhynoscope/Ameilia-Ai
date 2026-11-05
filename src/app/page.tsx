@@ -30,6 +30,9 @@ import {
   Brain,
   Lightbulb,
   X,
+  Camera,
+  Mic,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   ChatAttachment,
@@ -185,10 +188,18 @@ export default function AmeliaAICentralChat() {
   const [editingMsgId, setEditingMsgId] = useState<number | null>(null);
   const [editingMsgText, setEditingMsgText] = useState("");
 
+  // Mobile & Attachment State
+  const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
+  const [chatMenuOpen, setChatMenuOpen] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const mediaMenuRef = useRef<HTMLDivElement>(null);
+  const chatMenuRef = useRef<HTMLDivElement>(null);
 
   // Initialize Thinking Mode from localStorage
   useEffect(() => {
@@ -198,16 +209,41 @@ export default function AmeliaAICentralChat() {
     }
   }, []);
 
+  // Initialize sidebar state based on screen size (closed on mobile)
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  }, []);
+
+  // Listen for prompt insertion from Starters or Polish Message modals
+  useEffect(() => {
+    const handleInsert = (e: any) => {
+      if (e.detail?.prompt) {
+        setInputText(e.detail.prompt);
+        textareaRef.current?.focus();
+      }
+    };
+    window.addEventListener("amelia-insert-prompt", handleInsert);
+    return () => window.removeEventListener("amelia-insert-prompt", handleInsert);
+  }, []);
+
   const handleSelectThinkingMode = (mode: ThinkingMode) => {
     setThinkingMode(mode);
     localStorage.setItem("amelia_thinking_mode", mode);
   };
 
-  // Close 3-dot dropdown menu on outside click
+  // Close dropdown menus on outside click
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setOpenMenuConvoId(null);
+      }
+      if (mediaMenuRef.current && !mediaMenuRef.current.contains(e.target as Node)) {
+        setMediaMenuOpen(false);
+      }
+      if (chatMenuRef.current && !chatMenuRef.current.contains(e.target as Node)) {
+        setChatMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handleOutsideClick);
@@ -558,7 +594,7 @@ How can I help you and Amelia today?`,
 
   return (
     <div
-      className="flex-1 flex h-[calc(100vh-4rem)] bg-white overflow-hidden relative"
+      className="flex-1 flex h-[calc(100dvh-3.5rem)] sm:h-[calc(100dvh-4rem)] bg-white overflow-hidden relative"
       onDragOver={(e) => {
         e.preventDefault();
         setIsDragging(true);
@@ -570,12 +606,28 @@ How can I help you and Amelia today?`,
         handleFiles(e.dataTransfer.files);
       }}
     >
-      {/* Hidden file input for images, audio, video */}
+      {/* Hidden file inputs for images, audio, video & device camera/mic */}
       <input
         ref={fileInputRef}
         type="file"
         multiple
         accept="image/png,image/jpeg,image/webp,audio/mp3,audio/wav,audio/m4a,audio/aac,audio/ogg,video/mp4,video/webm,video/quicktime"
+        className="hidden"
+        onChange={(e) => handleFiles(e.target.files)}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => handleFiles(e.target.files)}
+      />
+      <input
+        ref={audioInputRef}
+        type="file"
+        accept="audio/*"
+        capture
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />
@@ -595,20 +647,43 @@ How can I help you and Amelia today?`,
         </div>
       )}
 
-      {/* Sidebar: Complete Conversation Management */}
-      <div
-        className={`${
-          sidebarOpen ? "w-80" : "w-0"
-        } transition-all duration-300 ease-in-out border-r border-pink-100 bg-white flex flex-col shrink-0 overflow-hidden shadow-sm z-20`}
+      {/* Mobile Backdrop Overlay for Sidebar Drawer */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar: Responsive Drawer on Mobile, Inline on Desktop */}
+      <aside
+        aria-label="Conversation history"
+        className={`fixed md:static inset-y-0 left-0 z-50 md:z-20 h-full bg-white border-r border-pink-100 flex flex-col shrink-0 overflow-hidden shadow-2xl md:shadow-sm transition-all duration-300 ease-in-out ${
+          sidebarOpen
+            ? "w-[85vw] max-w-[320px] md:w-80 translate-x-0"
+            : "w-0 -translate-x-full md:translate-x-0 md:w-0"
+        }`}
       >
-        {/* Header: New Chat & Action */}
+        {/* Header: New Chat & Mobile Close Button */}
         <div className="p-3.5 border-b border-pink-100 bg-pink-50/40 flex items-center gap-2">
           <button
-            onClick={startNewConversation}
+            onClick={() => {
+              startNewConversation();
+              if (typeof window !== "undefined" && window.innerWidth < 768) {
+                setSidebarOpen(false);
+              }
+            }}
             className="flex-1 flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-romantic-500 to-rose-400 hover:from-romantic-600 hover:to-rose-500 text-white font-semibold text-xs shadow-sm shadow-pink-300 transition"
           >
             <Plus className="w-4 h-4" />
             <span>New Conversation</span>
+          </button>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="md:hidden p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-pink-100/50 transition"
+            aria-label="Close sidebar"
+          >
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -680,6 +755,9 @@ How can I help you and Amelia today?`,
                   onClick={() => {
                     setActiveConvoId(c.id);
                     loadMessages(c.id);
+                    if (typeof window !== "undefined" && window.innerWidth < 768) {
+                      setSidebarOpen(false);
+                    }
                   }}
                   className={`group relative flex flex-col p-2.5 rounded-2xl cursor-pointer text-xs transition border ${
                     isActive
@@ -807,31 +885,34 @@ How can I help you and Amelia today?`,
             </button>
           </div>
         </div>
-      </div>
+      </aside>
 
       {/* Main Chat Central Column */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-white relative">
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-white relative min-w-0">
         {/* Top Chat Bar */}
-        <div className="px-4 py-3 border-b border-pink-100 flex items-center justify-between bg-white/95 backdrop-blur-xs">
-          <div className="flex items-center gap-2.5 truncate">
+        <div className="px-3 sm:px-4 py-2 sm:py-3 border-b border-pink-100 flex items-center justify-between bg-white/95 backdrop-blur-xs min-h-[50px]">
+          <div className="flex items-center gap-2 truncate min-w-0">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-1.5 rounded-xl text-gray-500 hover:bg-pink-50 hover:text-gray-800 transition shrink-0"
-              title="Toggle sidebar"
+              className="p-1.5 sm:p-2 rounded-xl text-gray-700 hover:bg-pink-50 hover:text-romantic-600 transition shrink-0 flex items-center gap-1"
+              title="Chat History"
+              aria-label="Open chat history"
             >
-              {sidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              <MessageSquare className="w-4 h-4 text-romantic-500" />
+              <span className="text-xs font-bold hidden sm:inline">History</span>
             </button>
 
-            <div className="flex items-center gap-2 truncate">
+            <div className="flex items-center gap-1.5 sm:gap-2 truncate min-w-0">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
-              <span className="font-bold text-sm text-gray-900 truncate">
+              <span className="font-bold text-xs sm:text-sm text-gray-900 truncate">
                 {activeConvo?.title || "Amelia AI"}
               </span>
               {activeConvo && (
                 <button
                   onClick={() => handleOpenRename(activeConvo)}
-                  className="text-gray-400 hover:text-gray-700 transition"
+                  className="p-1 text-gray-400 hover:text-gray-700 transition shrink-0"
                   title="Rename title"
+                  aria-label="Rename title"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
                 </button>
@@ -839,40 +920,104 @@ How can I help you and Amelia today?`,
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Active Thinking Mode Indicator Badge */}
-            <div className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-xl bg-pink-50 border border-pink-200 text-xs font-semibold text-romantic-700">
-              {thinkingMode === "quick" && <Zap className="w-3 h-3 text-amber-500" />}
-              {thinkingMode === "normal" && <Brain className="w-3 h-3 text-romantic-500" />}
-              {thinkingMode === "extra" && <Lightbulb className="w-3 h-3 text-purple-600" />}
-              <span className="capitalize">{thinkingMode} Mode</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Quick 1-tap New Chat */}
+            <button
+              onClick={startNewConversation}
+              className="p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-gradient-to-r from-romantic-500 to-rose-400 text-white font-bold text-xs shadow-xs transition flex items-center gap-1"
+              title="Start a new conversation"
+              aria-label="New conversation"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">New Chat</span>
+            </button>
+
+            {/* Desktop Full Toolbar */}
+            <div className="hidden lg:flex items-center gap-1.5">
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-pink-50 border border-pink-200 text-xs font-semibold text-romantic-700">
+                {thinkingMode === "quick" && <Zap className="w-3 h-3 text-amber-500" />}
+                {thinkingMode === "normal" && <Brain className="w-3 h-3 text-romantic-500" />}
+                {thinkingMode === "extra" && <Lightbulb className="w-3 h-3 text-purple-600" />}
+                <span className="capitalize">{thinkingMode} Mode</span>
+              </div>
+
+              <button
+                onClick={() => setVirtualDatesModalOpen(true)}
+                className="text-xs px-2.5 py-1.5 rounded-xl bg-pink-50 hover:bg-pink-100 border border-pink-200 text-romantic-700 font-semibold transition flex items-center gap-1.5"
+              >
+                <Gamepad2 className="w-3.5 h-3.5 text-romantic-500" />
+                <span>Virtual Dates</span>
+              </button>
+
+              <button
+                onClick={handleRegenerate}
+                disabled={loading || messages.length <= 1}
+                className="text-xs px-2.5 py-1.5 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 hover:bg-pink-50 font-medium transition flex items-center gap-1 disabled:opacity-40"
+                title="Regenerate last response"
+              >
+                <RefreshCw className="w-3 h-3 text-romantic-500" />
+                <span>Regenerate</span>
+              </button>
+
+              <button
+                onClick={clearCurrentConversation}
+                className="p-1.5 rounded-xl text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                title="Clear current conversation"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
 
-            <button
-              onClick={() => setVirtualDatesModalOpen(true)}
-              className="text-xs px-3 py-1.5 rounded-xl bg-pink-50 hover:bg-pink-100 border border-pink-200 text-romantic-700 font-semibold transition flex items-center gap-1.5"
-            >
-              <Gamepad2 className="w-3.5 h-3.5 text-romantic-500" />
-              <span className="hidden md:inline">Virtual Dates</span>
-            </button>
+            {/* Mobile / Tablet Overflow Menu */}
+            <div className="relative lg:hidden" ref={chatMenuRef}>
+              <button
+                onClick={() => setChatMenuOpen(!chatMenuOpen)}
+                className="p-1.5 rounded-xl text-gray-600 hover:text-gray-900 hover:bg-pink-50 transition"
+                aria-label="More options"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
 
-            <button
-              onClick={handleRegenerate}
-              disabled={loading || messages.length <= 1}
-              className="text-xs px-2.5 py-1.5 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 hover:bg-pink-50 font-medium transition flex items-center gap-1 disabled:opacity-40"
-              title="Regenerate last response"
-            >
-              <RefreshCw className="w-3 h-3 text-romantic-500" />
-              <span className="hidden sm:inline">Regenerate</span>
-            </button>
+              {chatMenuOpen && (
+                <div className="absolute right-0 top-10 z-50 w-48 bg-white rounded-2xl shadow-xl border border-pink-200 py-1 text-xs text-gray-700 animate-in fade-in zoom-in-95">
+                  <button
+                    onClick={() => {
+                      setVirtualDatesModalOpen(true);
+                      setChatMenuOpen(false);
+                    }}
+                    className="w-full px-3.5 py-2 text-left hover:bg-pink-50 flex items-center gap-2 text-gray-800 transition"
+                  >
+                    <Gamepad2 className="w-3.5 h-3.5 text-romantic-500" />
+                    <span>Virtual Dates</span>
+                  </button>
 
-            <button
-              onClick={clearCurrentConversation}
-              className="p-1.5 rounded-xl text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition"
-              title="Clear current conversation"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+                  <button
+                    onClick={() => {
+                      handleRegenerate();
+                      setChatMenuOpen(false);
+                    }}
+                    disabled={loading || messages.length <= 1}
+                    className="w-full px-3.5 py-2 text-left hover:bg-pink-50 flex items-center gap-2 text-gray-800 transition disabled:opacity-40"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-romantic-500" />
+                    <span>Regenerate Reply</span>
+                  </button>
+
+                  <div className="my-1 border-t border-pink-100" />
+
+                  <button
+                    onClick={() => {
+                      clearCurrentConversation();
+                      setChatMenuOpen(false);
+                    }}
+                    className="w-full px-3.5 py-2 text-left hover:bg-rose-50 flex items-center gap-2 text-rose-600 transition"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Clear Chat</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1089,36 +1234,39 @@ How can I help you and Amelia today?`,
         </div>
 
         {/* Input & Staging Bottom Bar */}
-        <div className="p-4 border-t border-pink-100 bg-white space-y-2">
-          {/* FEATURE 2: Thinking Mode Selector (directly near message input) */}
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-pink-50/70 border border-pink-200 shadow-xs">
-              <span className="text-[10.5px] uppercase font-bold text-gray-400 px-2 hidden sm:inline">
-                Reasoning Effort:
+        <div className="p-2.5 sm:p-4 border-t border-pink-100 bg-white space-y-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          {/* Thinking Mode Selector */}
+          <div className="flex items-center justify-between px-1 gap-1.5">
+            <div className="flex items-center gap-1 sm:gap-1.5 p-1 rounded-2xl bg-pink-50/70 border border-pink-200 shadow-xs max-w-full overflow-x-auto no-scrollbar">
+              <span className="text-[10px] uppercase font-bold text-gray-400 px-1.5 hidden sm:inline">
+                Reasoning:
               </span>
               {THINKING_MODES.map((mode) => {
                 const Icon = mode.icon;
                 const isSelected = thinkingMode === mode.id;
+                const shortLabel =
+                  mode.id === "quick" ? "Quick" : mode.id === "normal" ? "Normal" : "Extra";
                 return (
                   <button
                     key={mode.id}
                     type="button"
                     onClick={() => handleSelectThinkingMode(mode.id)}
                     title={mode.desc}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold transition ${
+                    className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-xl text-xs font-semibold transition shrink-0 ${
                       isSelected
                         ? "bg-white text-romantic-700 shadow-xs border border-pink-200"
                         : "text-gray-600 hover:text-gray-900"
                     }`}
                   >
                     <Icon className={`w-3.5 h-3.5 ${isSelected ? "text-romantic-600" : "text-gray-400"}`} />
-                    <span>{mode.label}</span>
+                    <span className="inline sm:hidden">{shortLabel}</span>
+                    <span className="hidden sm:inline">{mode.label}</span>
                   </button>
                 );
               })}
             </div>
 
-            <span className="text-[11px] text-gray-500 hidden md:inline">
+            <span className="text-[11px] text-gray-500 hidden md:inline truncate">
               {thinkingMode === "quick" && "⚡ Quick ideas & fast texting drafts"}
               {thinkingMode === "normal" && "🧠 Balanced everyday relationship coach"}
               {thinkingMode === "extra" && "💡 Deep reasoning for complex moments"}
@@ -1126,12 +1274,12 @@ How can I help you and Amelia today?`,
           </div>
 
           {uploadError && (
-            <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-between">
+            <div className="p-2.5 sm:p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{uploadError}</span>
               </div>
-              <button onClick={() => setUploadError(null)} className="text-rose-500 font-bold">×</button>
+              <button onClick={() => setUploadError(null)} className="text-rose-500 font-bold p-1">×</button>
             </div>
           )}
 
@@ -1139,7 +1287,7 @@ How can I help you and Amelia today?`,
           {stagedAttachments.length > 0 && (
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
               {stagedAttachments.map((att) => (
-                <div key={att.id} className="shrink-0 w-64">
+                <div key={att.id} className="shrink-0 w-56 sm:w-64">
                   <MediaPreview attachment={att} isStaging onRemove={() => removeStagedAttachment(att.id)} />
                 </div>
               ))}
@@ -1152,19 +1300,83 @@ How can I help you and Amelia today?`,
               e.preventDefault();
               handleSend();
             }}
-            className="flex items-end gap-2 bg-white rounded-3xl p-1.5 border border-pink-200 shadow-sm focus-within:ring-2 focus-within:ring-romantic-500/20 focus-within:border-romantic-400 transition"
+            className="flex items-end gap-1.5 sm:gap-2 bg-white rounded-3xl p-1.5 border border-pink-200 shadow-sm focus-within:ring-2 focus-within:ring-romantic-500/20 focus-within:border-romantic-400 transition"
           >
-            {/* Attachment Button */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="p-3 rounded-2xl text-romantic-500 hover:bg-pink-100 hover:text-romantic-600 transition shrink-0"
-              title="Attach screenshots, photos she sent, voice notes, or videos"
-            >
-              <Paperclip className="w-5 h-5" />
-            </button>
+            {/* Attachment Button with Popover Menu */}
+            <div className="relative" ref={mediaMenuRef}>
+              <button
+                type="button"
+                onClick={() => setMediaMenuOpen(!mediaMenuOpen)}
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl text-romantic-500 hover:bg-pink-100 hover:text-romantic-600 transition flex items-center justify-center shrink-0"
+                title="Attach photos, voice notes, videos, or take photo"
+                aria-label="Add attachment"
+              >
+                <Paperclip className="w-5 h-5" />
+              </button>
 
-            {/* Auto-growing Textarea */}
+              {/* Attachment Options Action Sheet */}
+              {mediaMenuOpen && (
+                <div className="absolute bottom-12 left-0 z-50 w-56 bg-white rounded-2xl shadow-xl border border-pink-200 p-1.5 space-y-1 animate-in fade-in zoom-in-95 text-xs text-gray-700">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      cameraInputRef.current?.click();
+                      setMediaMenuOpen(false);
+                    }}
+                    className="w-full px-3 py-2 text-left rounded-xl hover:bg-pink-50 flex items-center gap-2.5 text-gray-800 transition font-medium"
+                  >
+                    <div className="w-6 h-6 rounded-lg bg-pink-100 text-romantic-600 flex items-center justify-center">
+                      <Camera className="w-3.5 h-3.5" />
+                    </div>
+                    <span>Take Photo (Camera)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      fileInputRef.current?.click();
+                      setMediaMenuOpen(false);
+                    }}
+                    className="w-full px-3 py-2 text-left rounded-xl hover:bg-pink-50 flex items-center gap-2.5 text-gray-800 transition font-medium"
+                  >
+                    <div className="w-6 h-6 rounded-lg bg-pink-100 text-romantic-600 flex items-center justify-center">
+                      <ImageIcon className="w-3.5 h-3.5" />
+                    </div>
+                    <span>Photo & Video Gallery</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      audioInputRef.current?.click();
+                      setMediaMenuOpen(false);
+                    }}
+                    className="w-full px-3 py-2 text-left rounded-xl hover:bg-pink-50 flex items-center gap-2.5 text-gray-800 transition font-medium"
+                  >
+                    <div className="w-6 h-6 rounded-lg bg-pink-100 text-romantic-600 flex items-center justify-center">
+                      <Mic className="w-3.5 h-3.5" />
+                    </div>
+                    <span>Voice Note / Audio</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      fileInputRef.current?.click();
+                      setMediaMenuOpen(false);
+                    }}
+                    className="w-full px-3 py-2 text-left rounded-xl hover:bg-pink-50 flex items-center gap-2.5 text-gray-800 transition font-medium"
+                  >
+                    <div className="w-6 h-6 rounded-lg bg-gray-100 text-gray-600 flex items-center justify-center">
+                      <UploadCloud className="w-3.5 h-3.5" />
+                    </div>
+                    <span>Browse All Files</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Auto-growing Textarea: font-size 16px on mobile prevents iOS auto-zoom */}
             <textarea
               ref={textareaRef}
               rows={1}
@@ -1176,32 +1388,33 @@ How can I help you and Amelia today?`,
                   handleSend();
                 }
               }}
-              placeholder="Ask what to say, paste draft, or attach Amelia's photo/voice note/video..."
-              className="flex-1 max-h-36 py-3 px-2 bg-transparent text-gray-900 placeholder-gray-400 text-sm focus:outline-none resize-none"
+              placeholder="Ask what to text, paste draft, or attach Amelia's photo/voice note..."
+              className="flex-1 max-h-32 sm:max-h-36 py-2.5 px-2 bg-transparent text-gray-900 placeholder-gray-400 text-base sm:text-sm focus:outline-none resize-none leading-relaxed"
             />
 
-            {/* Beautiful Pink Send Button */}
+            {/* Send Button */}
             <button
               type="submit"
               disabled={(!inputText.trim() && stagedAttachments.length === 0) || loading}
-              className="px-5 py-3 rounded-2xl bg-gradient-to-r from-romantic-500 to-rose-400 hover:from-romantic-600 hover:to-rose-500 text-white font-bold text-xs shadow-md shadow-pink-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1.5 shrink-0"
+              className="w-10 h-10 sm:w-auto sm:px-5 sm:py-3 rounded-2xl bg-gradient-to-r from-romantic-500 to-rose-400 hover:from-romantic-600 hover:to-rose-500 text-white font-bold text-xs shadow-md shadow-pink-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center justify-center gap-1.5 shrink-0"
+              aria-label="Send message"
             >
               <Send className="w-4 h-4" />
               <span className="hidden sm:inline">Send</span>
             </button>
           </form>
 
-          <div className="flex items-center justify-between text-[11px] text-gray-500 px-2">
-            <span>Press Enter to send, Shift + Enter for new line</span>
-            <span>Supports Photos, Audio Voice Notes (MP3/WAV/M4A), & Videos (MP4/MOV)</span>
+          <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-gray-400 px-2">
+            <span className="hidden sm:inline">Press Enter to send, Shift + Enter for new line</span>
+            <span className="truncate">Supports Photos, Audio (MP3/WAV/M4A), & Videos (MP4/MOV)</span>
           </div>
         </div>
       </div>
 
       {/* RENAME CONVERSATION MODAL */}
       {convoToRename && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-pink-100 space-y-4 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-3 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom))] animate-fade-in">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-sm w-full shadow-2xl border border-pink-100 space-y-4 animate-in zoom-in-95">
             <h3 className="text-base font-bold text-gray-900">Rename Conversation</h3>
             <input
               type="text"
@@ -1209,19 +1422,19 @@ How can I help you and Amelia today?`,
               onChange={(e) => setRenameInputValue(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSaveRename()}
               placeholder="Enter new conversation title"
-              className="w-full px-3.5 py-2.5 rounded-2xl border border-pink-200 text-sm text-gray-900 focus:outline-none focus:border-romantic-500"
+              className="w-full px-3.5 py-2.5 rounded-2xl border border-pink-200 text-base sm:text-sm text-gray-900 focus:outline-none focus:border-romantic-500"
               autoFocus
             />
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-1">
               <button
                 onClick={() => setConvoToRename(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition"
+                className="px-4 py-2.5 min-h-[44px] rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition flex items-center justify-center"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveRename}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-romantic-500 text-white hover:bg-romantic-600 transition"
+                className="px-4 py-2.5 min-h-[44px] rounded-xl text-xs font-semibold bg-romantic-500 text-white hover:bg-romantic-600 transition flex items-center justify-center"
               >
                 Save Title
               </button>
@@ -1232,8 +1445,8 @@ How can I help you and Amelia today?`,
 
       {/* DELETE SINGLE CONVERSATION CONFIRMATION MODAL */}
       {convoToDelete && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-pink-100 space-y-4 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-3 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom))] animate-fade-in">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-sm w-full shadow-2xl border border-pink-100 space-y-4 animate-in zoom-in-95">
             <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center">
               <Trash2 className="w-6 h-6" />
             </div>
@@ -1246,13 +1459,13 @@ How can I help you and Amelia today?`,
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setConvoToDelete(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition"
+                className="px-4 py-2.5 min-h-[44px] rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition flex items-center justify-center"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmDelete}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 transition"
+                className="px-4 py-2.5 min-h-[44px] rounded-xl text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 transition flex items-center justify-center"
               >
                 Permanently Delete
               </button>
@@ -1263,8 +1476,8 @@ How can I help you and Amelia today?`,
 
       {/* DELETE ALL CONVERSATIONS CONFIRMATION MODAL */}
       {showDeleteAllModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-pink-100 space-y-4 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-3 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom))] animate-fade-in">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-sm w-full shadow-2xl border border-pink-100 space-y-4 animate-in zoom-in-95">
             <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center">
               <Trash2 className="w-6 h-6" />
             </div>
@@ -1277,13 +1490,13 @@ How can I help you and Amelia today?`,
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setShowDeleteAllModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition"
+                className="px-4 py-2.5 min-h-[44px] rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition flex items-center justify-center"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmDeleteAll}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 transition"
+                className="px-4 py-2.5 min-h-[44px] rounded-xl text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 transition flex items-center justify-center"
               >
                 Purge All Chats
               </button>

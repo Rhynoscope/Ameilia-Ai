@@ -95,32 +95,33 @@ export function DatesModal({ isOpen, onClose }: DatesModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-      <div className="bg-white border border-pink-200 rounded-3xl max-w-xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+      <div className="bg-white border border-pink-200 rounded-t-3xl sm:rounded-3xl max-w-xl w-full max-h-[90dvh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden pb-[env(safe-area-inset-bottom)]">
         {/* Header */}
-        <div className="p-6 border-b border-pink-100 flex items-center justify-between bg-gradient-to-r from-pink-50/50 to-white">
-          <div className="space-y-1">
+        <div className="p-4 sm:p-6 border-b border-pink-100 flex items-center justify-between bg-gradient-to-r from-pink-50/50 to-white">
+          <div className="space-y-1 pr-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-pink-100 text-romantic-600 text-xs font-semibold">
               <CalendarIcon className="w-3.5 h-3.5 text-romantic-500" />
               Special Occasions & Next Trips
             </div>
-            <h2 className="text-xl font-bold text-gray-900">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900">
               Important Dates & Next Visits
             </h2>
-            <p className="text-xs text-gray-600">
+            <p className="text-xs text-gray-600 line-clamp-2 sm:line-clamp-none">
               Count down the days until you see Amelia in person, celebrate anniversaries, and never miss a milestone.
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+            className="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition shrink-0"
+            aria-label="Close modal"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto space-y-4 flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-gray-800">Saved Events ({dates.length})</span>
             <button

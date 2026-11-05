@@ -116,26 +116,27 @@ export function RemindersModal({ isOpen, onClose, onCheckinSuccess }: RemindersM
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-      <div className="bg-white border border-pink-200 rounded-3xl max-w-xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+      <div className="bg-white border border-pink-200 rounded-t-3xl sm:rounded-3xl max-w-xl w-full max-h-[90dvh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden pb-[env(safe-area-inset-bottom)]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-pink-100 flex items-center justify-between bg-pastelPink-50/50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-romantic-500 text-white flex items-center justify-center shadow-sm">
-              <Bell className="w-5 h-5" />
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-pink-100 flex items-center justify-between bg-pink-50/50">
+          <div className="flex items-center gap-2.5 pr-2">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-romantic-500 text-white flex items-center justify-center shadow-sm shrink-0">
+              <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <h2 className="font-bold text-base text-gray-900">
+              <h2 className="font-bold text-sm sm:text-base text-gray-900">
                 Texting Reminders & Daily Goal
               </h2>
-              <p className="text-xs text-gray-500">
+              <p className="text-[11px] sm:text-xs text-gray-500 line-clamp-1 sm:line-clamp-none">
                 Gentle randomized nudges during waking hours.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full text-gray-400 hover:text-gray-700 hover:bg-white transition"
+            className="p-1.5 rounded-full text-gray-400 hover:text-gray-700 hover:bg-white transition shrink-0"
+            aria-label="Close modal"
           >
             <X className="w-5 h-5" />
           </button>
