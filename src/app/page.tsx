@@ -1101,16 +1101,26 @@ How can I help you and Amelia today?`,
                     </div>
                   )}
 
-                  {/* Interactive Suggested Replies with 3-5 Ready-to-Send Text Messages */}
+                  {/* Personalized Single Recommendation with YouTube-Style Feedback */}
                   {msg.suggested_replies && msg.suggested_replies.length > 0 && (
                     <div className="space-y-2 pt-1">
-                      <div className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-romantic-500" />
-                        Ready-to-Send Texts for Amelia (tap Copy or tweak with buttons):
+                      <div className="text-xs font-bold text-gray-800 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-romantic-500" />
+                          Recommended Text for Amelia (Top Match):
+                        </span>
+                        <span className="text-[11px] font-medium text-romantic-600 bg-pink-50 px-2 py-0.5 rounded-full border border-pink-100">
+                          Personalized Suggestion
+                        </span>
                       </div>
-                      <div className="grid grid-cols-1 gap-2.5">
-                        {msg.suggested_replies.map((reply, i) => (
-                          <ReplyCard key={i} reply={reply} />
+                      <div className="grid grid-cols-1">
+                        {/* Strictly render ONLY the single highest-ranked recommendation */}
+                        {msg.suggested_replies.slice(0, 1).map((reply, i) => (
+                          <ReplyCard
+                            key={reply.id || i}
+                            reply={reply}
+                            conversationId={msg.conversation_id || activeConvoId || undefined}
+                          />
                         ))}
                       </div>
                     </div>

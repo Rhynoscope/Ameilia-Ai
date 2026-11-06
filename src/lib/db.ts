@@ -15,6 +15,10 @@ import {
   ReminderLogItem,
   ReminderSettings,
   ThinkingMode,
+  ResponseFeedback,
+  SituationContext,
+  LearnedPreferencesState,
+  SituationPreference,
 } from "./types";
 
 let _pgPool: any = null;
@@ -187,7 +191,9 @@ export async function ensureSchema() {
       d1.prepare(`CREATE TABLE IF NOT EXISTS reminder_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, scheduled_time TEXT NOT NULL, prompt_message TEXT NOT NULL, status TEXT DEFAULT 'pending', completed_at TEXT, notes TEXT, created_at TEXT NOT NULL);`),
       d1.prepare(`CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, archived INTEGER DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`),
       d1.prepare(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, thinking_mode TEXT, suggested_replies TEXT, attachments TEXT, suggested_memories TEXT, created_at TEXT NOT NULL, FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE);`),
-      d1.prepare(`CREATE TABLE IF NOT EXISTS push_subscriptions (endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL);`)
+      d1.prepare(`CREATE TABLE IF NOT EXISTS push_subscriptions (endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL);`),
+      d1.prepare(`CREATE TABLE IF NOT EXISTS response_feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT, suggestion_text TEXT NOT NULL, rating TEXT NOT NULL, situation_context TEXT NOT NULL DEFAULT 'general', tone TEXT, style_tags TEXT, length_category TEXT, reasoning TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`),
+      d1.prepare(`CREATE INDEX IF NOT EXISTS idx_feedback_context_rating ON response_feedback(situation_context, rating);`)
     ]);
   } else if (process.env.DATABASE_URL) {
     const pool = getPgPool();
@@ -261,6 +267,21 @@ export async function ensureSchema() {
           auth TEXT NOT NULL,
           created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS response_feedback (
+          id SERIAL PRIMARY KEY,
+          conversation_id TEXT,
+          suggestion_text TEXT NOT NULL,
+          rating TEXT NOT NULL,
+          situation_context TEXT NOT NULL DEFAULT 'general',
+          tone TEXT,
+          style_tags TEXT,
+          length_category TEXT,
+          reasoning TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_feedback_context_rating ON response_feedback(situation_context, rating);
       `);
     }
   } else {
@@ -335,6 +356,21 @@ export async function ensureSchema() {
         auth TEXT NOT NULL,
         created_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS response_feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id TEXT,
+        suggestion_text TEXT NOT NULL,
+        rating TEXT NOT NULL,
+        situation_context TEXT NOT NULL DEFAULT 'general',
+        tone TEXT,
+        style_tags TEXT,
+        length_category TEXT,
+        reasoning TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_feedback_context_rating ON response_feedback(situation_context, rating);
     `);
   }
 
@@ -343,6 +379,26 @@ export async function ensureSchema() {
   try { await executeRun("ALTER TABLE memories ADD COLUMN status TEXT DEFAULT 'confirmed'"); } catch {}
   try { await executeRun("ALTER TABLE memories ADD COLUMN source_type TEXT DEFAULT 'her_statement'"); } catch {}
   try { await executeRun("ALTER TABLE memories ADD COLUMN related_keys TEXT"); } catch {}
+
+  // Safe creation of response_feedback table
+  try {
+    await executeRun(`
+      CREATE TABLE IF NOT EXISTS response_feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id TEXT,
+        suggestion_text TEXT NOT NULL,
+        rating TEXT NOT NULL,
+        situation_context TEXT NOT NULL DEFAULT 'general',
+        tone TEXT,
+        style_tags TEXT,
+        length_category TEXT,
+        reasoning TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    await executeRun(`CREATE INDEX IF NOT EXISTS idx_feedback_context_rating ON response_feedback(situation_context, rating);`);
+  } catch {}
 
   // Seed default settings if empty
   const countRow = await querySingle<{ count: string | number }>("SELECT COUNT(*) as count FROM settings");
@@ -869,4 +925,304 @@ export async function savePushSubscription(endpoint: string, p256dh: string, aut
 
 export async function getPushSubscriptions(): Promise<any[]> {
   return queryRows("SELECT * FROM push_subscriptions");
+}
+
+// ==========================================
+// RESPONSE FEEDBACK & LEARNED PREFERENCES (YOUTUBE-STYLE LEARNING)
+// ==========================================
+
+export async function recordResponseFeedback(data: {
+  conversation_id?: string;
+  suggestion_text: string;
+  rating: "like" | "dislike";
+  situation_context?: SituationContext;
+  tone?: string;
+  style_tags?: string[];
+  length_category?: "short" | "medium" | "long";
+  reasoning?: string;
+}): Promise<ResponseFeedback> {
+  const now = new Date().toISOString();
+  const situation = data.situation_context || "general";
+  const cleanText = data.suggestion_text.trim();
+  const tagsJson = data.style_tags ? JSON.stringify(data.style_tags) : null;
+
+  let lengthCat = data.length_category;
+  if (!lengthCat) {
+    if (cleanText.length < 65) lengthCat = "short";
+    else if (cleanText.length > 150) lengthCat = "long";
+    else lengthCat = "medium";
+  }
+
+  // Check if existing rating for this exact text exists
+  const existing = await querySingle<any>(
+    "SELECT * FROM response_feedback WHERE suggestion_text = ? ORDER BY id DESC LIMIT 1",
+    [cleanText]
+  );
+
+  if (existing) {
+    if (existing.rating === data.rating) {
+      return {
+        ...existing,
+        style_tags: existing.style_tags ? JSON.parse(existing.style_tags) : [],
+      };
+    }
+    // Update rating
+    await executeRun(
+      `UPDATE response_feedback
+       SET rating = ?,
+           situation_context = COALESCE(?, situation_context),
+           tone = COALESCE(?, tone),
+           length_category = COALESCE(?, length_category),
+           updated_at = ?
+       WHERE id = ?`,
+      [data.rating, situation, data.tone || existing.tone, lengthCat, now, existing.id]
+    );
+
+    return {
+      id: existing.id,
+      conversation_id: existing.conversation_id,
+      suggestion_text: cleanText,
+      rating: data.rating,
+      situation_context: situation,
+      tone: data.tone || existing.tone,
+      style_tags: existing.style_tags ? JSON.parse(existing.style_tags) : [],
+      length_category: lengthCat,
+      reasoning: data.reasoning || existing.reasoning,
+      created_at: existing.created_at,
+      updated_at: now,
+    };
+  }
+
+  await executeRun(
+    `INSERT INTO response_feedback (conversation_id, suggestion_text, rating, situation_context, tone, style_tags, length_category, reasoning, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      data.conversation_id || null,
+      cleanText,
+      data.rating,
+      situation,
+      data.tone || "Natural & Warm",
+      tagsJson,
+      lengthCat,
+      data.reasoning || null,
+      now,
+      now,
+    ]
+  );
+
+  const created = await querySingle<any>(
+    "SELECT * FROM response_feedback ORDER BY id DESC LIMIT 1"
+  );
+
+  return created
+    ? {
+        ...created,
+        style_tags: created.style_tags ? JSON.parse(created.style_tags) : [],
+      }
+    : {
+        id: Date.now(),
+        conversation_id: data.conversation_id,
+        suggestion_text: cleanText,
+        rating: data.rating,
+        situation_context: situation,
+        tone: data.tone || "Natural & Warm",
+        style_tags: data.style_tags,
+        length_category: lengthCat,
+        reasoning: data.reasoning,
+        created_at: now,
+        updated_at: now,
+      };
+}
+
+export async function getResponseFeedbackList(limit = 100): Promise<ResponseFeedback[]> {
+  const rows = await queryRows<any>(
+    `SELECT * FROM response_feedback ORDER BY created_at DESC LIMIT ?`,
+    [limit]
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    conversation_id: r.conversation_id,
+    suggestion_text: r.suggestion_text,
+    rating: r.rating as "like" | "dislike",
+    situation_context: (r.situation_context || "general") as SituationContext,
+    tone: r.tone,
+    style_tags: r.style_tags ? (typeof r.style_tags === "string" ? JSON.parse(r.style_tags) : r.style_tags) : [],
+    length_category: r.length_category,
+    reasoning: r.reasoning,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+  }));
+}
+
+export async function deleteResponseFeedback(id: number): Promise<void> {
+  await executeRun("DELETE FROM response_feedback WHERE id = ?", [id]);
+}
+
+export async function deleteResponseFeedbackByTrait(trait: string): Promise<void> {
+  const s = `%${trait.trim()}%`;
+  await executeRun(
+    "DELETE FROM response_feedback WHERE tone LIKE ? OR style_tags LIKE ? OR suggestion_text LIKE ?",
+    [s, s, s]
+  );
+}
+
+export async function resetAllResponseFeedback(): Promise<void> {
+  await executeRun("DELETE FROM response_feedback");
+}
+
+export async function getLearnedPreferences(): Promise<LearnedPreferencesState> {
+  const feedbacks = await getResponseFeedbackList(200);
+
+  let totalLikes = 0;
+  let totalDislikes = 0;
+
+  const globalToneScores: Record<string, number> = {};
+  const globalLengthCounts: Record<string, number> = { short: 0, medium: 0, long: 0 };
+  const situationMap: Record<string, {
+    likes: number;
+    dislikes: number;
+    toneScores: Record<string, number>;
+    lengthCounts: Record<string, number>;
+    likedExamples: string[];
+    dislikedExamples: string[];
+    likedTags: Set<string>;
+    dislikedTags: Set<string>;
+  }> = {};
+
+  for (const fb of feedbacks) {
+    const sit = fb.situation_context || "general";
+    if (!situationMap[sit]) {
+      situationMap[sit] = {
+        likes: 0,
+        dislikes: 0,
+        toneScores: {},
+        lengthCounts: { short: 0, medium: 0, long: 0 },
+        likedExamples: [],
+        dislikedExamples: [],
+        likedTags: new Set(),
+        dislikedTags: new Set(),
+      };
+    }
+
+    const sitObj = situationMap[sit];
+    const isLike = fb.rating === "like";
+    const tone = fb.tone || "Natural & Warm";
+    const length = fb.length_category || "medium";
+
+    if (isLike) {
+      totalLikes++;
+      sitObj.likes++;
+      sitObj.toneScores[tone] = (sitObj.toneScores[tone] || 0) + 2;
+      globalToneScores[tone] = (globalToneScores[tone] || 0) + 2;
+      sitObj.lengthCounts[length] = (sitObj.lengthCounts[length] || 0) + 1;
+      globalLengthCounts[length] = (globalLengthCounts[length] || 0) + 1;
+      if (sitObj.likedExamples.length < 5) sitObj.likedExamples.push(fb.suggestion_text);
+      if (fb.style_tags) {
+        for (const t of fb.style_tags) sitObj.likedTags.add(t);
+      }
+    } else {
+      totalDislikes++;
+      sitObj.dislikes++;
+      sitObj.toneScores[tone] = (sitObj.toneScores[tone] || 0) - 3;
+      globalToneScores[tone] = (globalToneScores[tone] || 0) - 3;
+      sitObj.lengthCounts[length] = (sitObj.lengthCounts[length] || 0) - 1;
+      globalLengthCounts[length] = (globalLengthCounts[length] || 0) - 1;
+      if (sitObj.dislikedExamples.length < 5) sitObj.dislikedExamples.push(fb.suggestion_text);
+      if (fb.style_tags) {
+        for (const t of fb.style_tags) sitObj.dislikedTags.add(t);
+      }
+    }
+  }
+
+  const totalFeedback = totalLikes + totalDislikes;
+  let stage: 1 | 2 | 3 | 4 = 1;
+  let stageLabel = "Stage 1 — Beginning (Learning Base Style)";
+
+  if (totalFeedback >= 25 && totalLikes >= 15) {
+    stage = 4;
+    stageLabel = "Stage 4 — Best Match (One Ideal Recommendation)";
+  } else if (totalFeedback >= 11) {
+    stage = 3;
+    stageLabel = "Stage 3 — Personalized Recommendations (Tuning Delivery)";
+  } else if (totalFeedback >= 4) {
+    stage = 2;
+    stageLabel = "Stage 2 — Recognizing Patterns (Identifying Preferred Vibes)";
+  }
+
+  const preferredTones = Object.entries(globalToneScores)
+    .filter(([_, score]) => score > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([t]) => t);
+
+  const avoidedTones = Object.entries(globalToneScores)
+    .filter(([_, score]) => score < 0)
+    .sort((a, b) => a[1] - b[1])
+    .map(([t]) => t);
+
+  let preferredLength: "short" | "medium" | "long" = "medium";
+  let maxLenCount = -999;
+  for (const [len, count] of Object.entries(globalLengthCounts)) {
+    if (count > maxLenCount) {
+      maxLenCount = count;
+      preferredLength = len as any;
+    }
+  }
+
+  const situations: Record<string, SituationPreference> = {};
+  for (const [sit, obj] of Object.entries(situationMap)) {
+    const sitPreferredTones = Object.entries(obj.toneScores)
+      .filter(([_, score]) => score > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([tone, score]) => ({ tone, score }));
+
+    const sitAvoidedTones = Object.entries(obj.toneScores)
+      .filter(([_, score]) => score < 0)
+      .sort((a, b) => a[1] - b[1])
+      .map(([tone, score]) => ({ tone, score }));
+
+    let sitPrefLength: "short" | "medium" | "long" = "medium";
+    let sitMaxLen = -999;
+    for (const [len, count] of Object.entries(obj.lengthCounts)) {
+      if (count > sitMaxLen) {
+        sitMaxLen = count;
+        sitPrefLength = len as any;
+      }
+    }
+
+    situations[sit] = {
+      situation: sit as SituationContext,
+      totalFeedback: obj.likes + obj.dislikes,
+      likes: obj.likes,
+      dislikes: obj.dislikes,
+      preferredTones: sitPreferredTones,
+      avoidedTones: sitAvoidedTones,
+      preferredLength: sitPrefLength,
+      likedCharacteristics: Array.from(obj.likedTags),
+      dislikedCharacteristics: Array.from(obj.dislikedTags),
+      recentLikedExamples: obj.likedExamples,
+      recentDislikedExamples: obj.dislikedExamples,
+    };
+  }
+
+  const globalLikedStyles = Array.from(
+    new Set(Object.values(situations).flatMap((s) => s.likedCharacteristics))
+  );
+  const globalDislikedStyles = Array.from(
+    new Set(Object.values(situations).flatMap((s) => s.dislikedCharacteristics))
+  );
+
+  return {
+    stage,
+    stageLabel,
+    totalLikes,
+    totalDislikes,
+    globalLikedStyles,
+    globalDislikedStyles,
+    preferredTones,
+    avoidedTones,
+    preferredLength,
+    situations,
+    recentFeedbacks: feedbacks.slice(0, 30),
+  };
 }

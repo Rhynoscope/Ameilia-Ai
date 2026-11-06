@@ -131,10 +131,70 @@ export interface ReminderLogItem {
   created_at: string;
 }
 
+export type SituationContext =
+  | "romantic"
+  | "morning_night"
+  | "playful_funny"
+  | "serious"
+  | "apology"
+  | "comforting_supportive"
+  | "flirting"
+  | "starters"
+  | "advice"
+  | "difficult_emotional"
+  | "general";
+
 export interface SuggestedReply {
+  id?: string;
   message: string;
   tone: string;
   explanation: string;
+  situation?: SituationContext;
+  styleTags?: string[];
+  lengthCategory?: "short" | "medium" | "long";
+  rating?: "like" | "dislike" | null;
+}
+
+export interface ResponseFeedback {
+  id: number;
+  conversation_id?: string;
+  suggestion_text: string;
+  rating: "like" | "dislike";
+  situation_context: SituationContext;
+  tone?: string;
+  style_tags?: string[];
+  length_category?: "short" | "medium" | "long";
+  reasoning?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SituationPreference {
+  situation: SituationContext;
+  totalFeedback: number;
+  likes: number;
+  dislikes: number;
+  preferredTones: { tone: string; score: number }[];
+  avoidedTones: { tone: string; score: number }[];
+  preferredLength: "short" | "medium" | "long";
+  likedCharacteristics: string[];
+  dislikedCharacteristics: string[];
+  recentLikedExamples: string[];
+  recentDislikedExamples: string[];
+}
+
+export interface LearnedPreferencesState {
+  stage: 1 | 2 | 3 | 4; // 1 = Beginning, 2 = Recognizing patterns, 3 = Personalized recommendations, 4 = Best match
+  stageLabel: string;
+  totalLikes: number;
+  totalDislikes: number;
+  globalLikedStyles: string[];
+  globalDislikedStyles: string[];
+  preferredTones: string[];
+  avoidedTones: string[];
+  preferredLength: "short" | "medium" | "long";
+  situations: Record<string, SituationPreference>;
+  recentFeedbacks: ResponseFeedback[];
 }
 
 export interface ExtractedMemorySuggestion {

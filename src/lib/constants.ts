@@ -1,4 +1,18 @@
-import { CommunicationProfile, ReminderSettings, TextingStyleOption, VirtualDateIdea } from "./types";
+import { CommunicationProfile, ReminderSettings, TextingStyleOption, VirtualDateIdea, SituationContext } from "./types";
+
+export const SITUATION_DEFINITIONS: { id: SituationContext; label: string; icon: string; description: string }[] = [
+  { id: "romantic", label: "Romantic Messages", icon: "🌹", description: "Heartfelt, deep affection, sweet and passionate expressions" },
+  { id: "morning_night", label: "Morning & Night", icon: "🌅", description: "Good morning check-ins, sleep and dream inquiries, sweet night texts" },
+  { id: "playful_funny", label: "Playful & Teasing", icon: "😂", description: "Inside jokes, banter, memes, lighthearted teasing" },
+  { id: "comforting_supportive", label: "Comforting & Supportive", icon: "🫂", description: "Post-work exhaustion, validating feelings, low-pressure warmth" },
+  { id: "flirting", label: "Flirting & Chemistry", icon: "✨", description: "Charming banter, playful tension, intimate warmth" },
+  { id: "serious", label: "Serious & Future Plans", icon: "🌌", description: "Future home, moving in, life decisions, heartfelt commitments" },
+  { id: "apology", label: "Apologies & Repair", icon: "🕊️", description: "Accountable, mature apologies without excuses or groveling" },
+  { id: "starters", label: "Conversation Starters", icon: "💬", description: "Spontaneous thoughts, restarting quiet chats without pressure" },
+  { id: "advice", label: "Relationship Advice", icon: "💡", description: "Tactical guidance on how to navigate distance and conversations" },
+  { id: "difficult_emotional", label: "Emotional Reassurance", icon: "🛡️", description: "Reassurance when she feels anxious or left on read" },
+  { id: "general", label: "Everyday Chat", icon: "☕", description: "Casual check-ins, day-to-day sharing and natural connection" },
+];
 
 export const TEXTING_STYLES: TextingStyleOption[] = [
   { id: "funny", label: "Funny", emoji: "😂", description: "Make her laugh with wit and lighthearted teasing", tag: "Humor" },

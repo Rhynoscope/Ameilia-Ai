@@ -14,8 +14,13 @@ import {
   X,
   User,
   Shield,
+  ThumbsUp,
+  ThumbsDown,
+  RotateCcw,
+  TrendingUp,
+  BarChart2,
 } from "lucide-react";
-import { CommunicationProfile } from "@/lib/types";
+import { CommunicationProfile, LearnedPreferencesState } from "@/lib/types";
 import { DEFAULT_COMMUNICATION_PROFILE } from "@/lib/constants";
 
 interface SettingsModalProps {
@@ -33,9 +38,15 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [newAvoid, setNewAvoid] = useState("");
   const [saved, setSaved] = useState(false);
 
+  // YouTube-Style Learning Preferences State
+  const [learnedPrefs, setLearnedPrefs] = useState<LearnedPreferencesState | null>(null);
+  const [loadingPrefs, setLoadingPrefs] = useState(false);
+  const [resettingPrefs, setResettingPrefs] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       loadSettings();
+      loadLearnedPreferences();
     }
   }, [isOpen]);
 
@@ -48,6 +59,59 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setHasApiKey(Boolean(data.hasKey));
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const loadLearnedPreferences = async () => {
+    setLoadingPrefs(true);
+    try {
+      const res = await fetch("/api/preferences");
+      if (res.ok) {
+        const data: any = await res.json();
+        if (data.preferences) {
+          setLearnedPrefs(data.preferences);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load learned preferences:", e);
+    } finally {
+      setLoadingPrefs(false);
+    }
+  };
+
+  const handleRemoveTrait = async (trait: string) => {
+    try {
+      const res = await fetch(`/api/preferences/trait?trait=${encodeURIComponent(trait)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        const data: any = await res.json();
+        if (data.preferences) setLearnedPrefs(data.preferences);
+      }
+    } catch (e) {
+      console.error("Failed to delete trait:", e);
+    }
+  };
+
+  const handleResetPreferences = async () => {
+    const confirmReset = window.confirm(
+      "Are you sure you want to reset all learned recommendations and preferences? Amelia AI will return to Stage 1 base recommendations."
+    );
+    if (!confirmReset) return;
+
+    setResettingPrefs(true);
+    try {
+      const res = await fetch("/api/preferences/reset", {
+        method: "POST",
+      });
+      if (res.ok) {
+        const data: any = await res.json();
+        if (data.preferences) setLearnedPrefs(data.preferences);
+      }
+    } catch (e) {
+      console.error("Failed to reset preferences:", e);
+    } finally {
+      setResettingPrefs(false);
     }
   };
 
@@ -268,6 +332,158 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* YouTube-Style Recommendation Learning System */}
+          <div className="p-4 rounded-2xl bg-white border border-pink-200 space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
+                  <BarChart2 className="w-4 h-4 text-romantic-500" />
+                  Recommendation Learning (YouTube-Style)
+                </span>
+                <p className="text-gray-500 text-[11px] mt-0.5">
+                  Learns from your Likes 👍 and Dislikes 👎 to personalize future single recommendations.
+                </p>
+              </div>
+
+              {learnedPrefs && (
+                <button
+                  type="button"
+                  onClick={handleResetPreferences}
+                  disabled={resettingPrefs}
+                  className="px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg border border-rose-200 transition flex items-center gap-1 shrink-0"
+                  title="Reset all learned preferences back to default"
+                >
+                  <RotateCcw className={`w-3 h-3 ${resettingPrefs ? "animate-spin" : ""}`} />
+                  <span>Reset All</span>
+                </button>
+              )}
+            </div>
+
+            {loadingPrefs ? (
+              <div className="p-4 text-center text-gray-400 text-xs flex items-center justify-center gap-1.5">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>Loading learned preferences...</span>
+              </div>
+            ) : learnedPrefs ? (
+              <div className="space-y-3">
+                {/* Stage Banner */}
+                <div className="p-3 rounded-xl bg-gradient-to-r from-pink-50 to-rose-50 border border-pink-200/80 space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-gray-900 flex items-center gap-1">
+                      <TrendingUp className="w-3.5 h-3.5 text-romantic-500" />
+                      {learnedPrefs.stageLabel}
+                    </span>
+                    <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-white text-romantic-600 border border-pink-200">
+                      Stage {learnedPrefs.stage} of 4
+                    </span>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="w-full bg-pink-200/50 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="bg-romantic-500 h-full rounded-full transition-all duration-500"
+                      style={{
+                        width:
+                          learnedPrefs.stage === 4
+                            ? "100%"
+                            : learnedPrefs.stage === 3
+                            ? "75%"
+                            : learnedPrefs.stage === 2
+                            ? "50%"
+                            : "25%",
+                      }}
+                    />
+                  </div>
+
+                  {/* Stats counts */}
+                  <div className="flex items-center gap-4 pt-1 text-[11px] text-gray-600 font-medium">
+                    <span className="flex items-center gap-1 text-emerald-700">
+                      <ThumbsUp className="w-3 h-3 fill-emerald-600 text-emerald-600" />
+                      <strong>{learnedPrefs.totalLikes}</strong> Likes
+                    </span>
+                    <span className="flex items-center gap-1 text-rose-700">
+                      <ThumbsDown className="w-3 h-3 fill-rose-600 text-rose-600" />
+                      <strong>{learnedPrefs.totalDislikes}</strong> Dislikes
+                    </span>
+                    <span className="text-gray-500">
+                      Preferred length: <strong className="text-gray-800 uppercase">{learnedPrefs.preferredLength}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Things I Like */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-semibold text-gray-700 flex items-center gap-1">
+                    <ThumbsUp className="w-3 h-3 text-emerald-600" />
+                    <span>Things I Like (Prioritized in Recommendations):</span>
+                  </label>
+                  {learnedPrefs.preferredTones.length === 0 &&
+                  learnedPrefs.globalLikedStyles.length === 0 ? (
+                    <p className="text-[11px] text-gray-400 italic">
+                      No positive feedback yet. Tap 👍 on recommended texts to build this list!
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {Array.from(
+                        new Set([...learnedPrefs.preferredTones, ...learnedPrefs.globalLikedStyles])
+                      ).map((trait, i) => (
+                        <span
+                          key={i}
+                          className="px-2.5 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 text-[11px] font-medium flex items-center gap-1.5 border border-emerald-200"
+                        >
+                          <span>{trait}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTrait(trait)}
+                            className="text-emerald-500 hover:text-emerald-800 transition"
+                            title={`Remove "${trait}" from liked styles`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Things I Dislike */}
+                <div className="space-y-1.5 pt-1.5 border-t border-pink-100">
+                  <label className="block text-[11px] font-semibold text-gray-700 flex items-center gap-1">
+                    <ThumbsDown className="w-3 h-3 text-rose-600" />
+                    <span>Things I Dislike (Avoided in Recommendations):</span>
+                  </label>
+                  {learnedPrefs.avoidedTones.length === 0 &&
+                  learnedPrefs.globalDislikedStyles.length === 0 ? (
+                    <p className="text-[11px] text-gray-400 italic">
+                      No negative feedback yet. Tap 👎 if a recommendation feels robotic or cringey to penalize that style.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {Array.from(
+                        new Set([...learnedPrefs.avoidedTones, ...learnedPrefs.globalDislikedStyles])
+                      ).map((trait, i) => (
+                        <span
+                          key={i}
+                          className="px-2.5 py-0.5 rounded-lg bg-rose-50 text-rose-800 text-[11px] font-medium flex items-center gap-1.5 border border-rose-200"
+                        >
+                          <span>{trait}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTrait(trait)}
+                            className="text-rose-500 hover:text-rose-800 transition"
+                            title={`Remove "${trait}" from disliked styles`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* Backup & Data */}

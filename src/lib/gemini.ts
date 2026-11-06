@@ -1,12 +1,13 @@
 import { GoogleGenAI } from "@google/genai";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { getSetting, getMemories, getImportantDates, getSettingSync } from "./db";
+import { getSetting, getMemories, getImportantDates, getSettingSync, getLearnedPreferences } from "./db";
 import {
   ChatAttachment,
   CommunicationProfile,
   ExtractedMemorySuggestion,
   ImprovementResult,
   ScreenshotAnalysisResult,
+  SituationContext,
   StarterItem,
   SuggestedReply,
   TextingPreferences,
@@ -117,6 +118,44 @@ function formatPrioritizedMemories(memories: any[], queryContext = ""): string {
 }
 
 /**
+ * Detects the situational context of a user query or conversation turn
+ */
+export function detectSituationContext(prompt: string): SituationContext {
+  const p = prompt.toLowerCase();
+  if (p.includes("morning") || p.includes("night") || p.includes("sleep") || p.includes("dream") || p.includes("wake") || p.includes("bed") || p.includes("goodnight")) {
+    return "morning_night";
+  }
+  if (p.includes("sorry") || p.includes("apolog") || p.includes("forgive") || p.includes("my fault") || p.includes("mess up")) {
+    return "apology";
+  }
+  if (p.includes("tired") || p.includes("exhaust") || p.includes("rough day") || p.includes("work shift") || p.includes("stress") || p.includes("cry") || p.includes("upset") || p.includes("sad") || p.includes("overwhelm") || p.includes("decompress")) {
+    return "comforting_supportive";
+  }
+  if (p.includes("flirt") || p.includes("spicy") || p.includes("sexy") || p.includes("chemistry") || p.includes("hot") || p.includes("tease her")) {
+    return "flirting";
+  }
+  if (p.includes("funny") || p.includes("joke") || p.includes("make her laugh") || p.includes("banter") || p.includes("humor") || p.includes("sue") || p.includes("courtroom") || p.includes("silly")) {
+    return "playful_funny";
+  }
+  if (p.includes("romantic") || p.includes("love") || p.includes("sweet") || p.includes("miss her") || p.includes("cuddle") || p.includes("heartfelt") || p.includes("anniversary") || p.includes("jack and sally")) {
+    return "romantic";
+  }
+  if (p.includes("future") || p.includes("moving in") || p.includes("graduation") || p.includes("vegas") || p.includes("japan") || p.includes("marry") || p.includes("propose") || p.includes("house") || p.includes("serious")) {
+    return "serious";
+  }
+  if (p.includes("starter") || p.includes("start a convo") || p.includes("restart") || p.includes("haven't texted") || p.includes("quiet")) {
+    return "starters";
+  }
+  if (p.includes("advice") || p.includes("what should i do") || p.includes("how to handle") || p.includes("help me understand")) {
+    return "advice";
+  }
+  if (p.includes("fight") || p.includes("argument") || p.includes("anxious") || p.includes("left on read") || p.includes("ghost") || p.includes("worried")) {
+    return "difficult_emotional";
+  }
+  return "general";
+}
+
+/**
  * Builds the comprehensive personalized system instruction for Amelia AI
  * Specializing in Long-Distance Relationship (LDR) Communication & Relationship Memory
  */
@@ -127,6 +166,9 @@ export async function buildCoachSystemInstruction(extraGoal = "", queryContext =
   );
   const memories = await getMemories();
   const importantDates = await getImportantDates();
+  const learnedPrefs = await getLearnedPreferences();
+  const situation = detectSituationContext(queryContext);
+  const sitPref = learnedPrefs.situations[situation];
 
   const memoryContext = formatPrioritizedMemories(memories, queryContext);
 
@@ -141,6 +183,46 @@ export async function buildCoachSystemInstruction(extraGoal = "", queryContext =
   const wordsToAvoidContext = profile.wordsToAvoid && profile.wordsToAvoid.length > 0
     ? profile.wordsToAvoid.join(", ")
     : "None specified.";
+
+  let learningDirective = `
+ACTIVE LEARNING & RECOMMENDATION SYSTEM (YOUTUBE-STYLE ALGORITHM):
+- CURRENT RECOMMENDATION STAGE: ${learnedPrefs.stageLabel} (Feedback Stats: ${learnedPrefs.totalLikes} Likes 👍, ${learnedPrefs.totalDislikes} Dislikes 👎).
+- ACTIVE SITUATION DETECTED: "${situation.toUpperCase()}".
+`;
+
+  if (sitPref && sitPref.totalFeedback > 0) {
+    learningDirective += `- Learned preferences specifically for "${situation}":
+  * Preferred Tones (ranked by his likes): ${sitPref.preferredTones.map((t) => t.tone).join(", ") || "Natural & Warm"}
+  * Tones to AVOID (downvoted by him): ${sitPref.avoidedTones.map((t) => t.tone).join(", ") || "None"}
+  * Target Message Length: ${sitPref.preferredLength.toUpperCase()}
+  * Liked Traits to prioritize: ${sitPref.likedCharacteristics.join(", ") || "Warm, grounded, playful"}
+  * Disliked Traits to AVOID: ${sitPref.dislikedCharacteristics.join(", ") || "Robotic, cringey clichés, dry phrasing"}
+`;
+    if (sitPref.recentLikedExamples.length > 0) {
+      learningDirective += `  * Positive Style Inspirations (messages he liked in similar moments - imitate the style, NEVER copy verbatim):\n${sitPref.recentLikedExamples.slice(0, 3).map((e) => `    - "${e}"`).join("\n")}\n`;
+    }
+    if (sitPref.recentDislikedExamples.length > 0) {
+      learningDirective += `  * Negative Style Examples (messages he DISLIKED in similar moments - avoid this style/wording):\n${sitPref.recentDislikedExamples.slice(0, 3).map((e) => `    - "${e}"`).join("\n")}\n`;
+    }
+  } else {
+    learningDirective += `- Global Learned Style Preferences:
+  * Preferred Tones: ${learnedPrefs.preferredTones.slice(0, 4).join(", ") || "Natural & Warm, Playful Banter, Sweet & Caring"}
+  * Avoided Tones: ${learnedPrefs.avoidedTones.slice(0, 4).join(", ") || "Overly formal, dramatic, robotic clichés"}
+  * Target Message Length: ${learnedPrefs.preferredLength.toUpperCase()}
+  * Liked Traits to prioritize: ${learnedPrefs.globalLikedStyles.join(", ") || "Authentic texting phrasing, subtle humor, genuine affection"}
+  * Disliked Traits to avoid: ${learnedPrefs.globalDislikedStyles.join(", ") || "Robotic phrasing, dry replies, pressure"}
+`;
+  }
+
+  learningDirective += `
+ONE BEST RECOMMENDATION DIRECTIVE (CRITICAL):
+- By default, generate and display ONLY ONE response: the AI's single best prediction of what he would want to send.
+- The user does NOT want a giant list of 5–10 choices or multiple cards to sort through.
+- Internally brainstorm candidate messages, compare them against his learned preferences for "${situation}", and select the #1 HIGHEST-RANKED recommendation!
+- Format the single recommendation with:
+  [RECOMMENDED_RESPONSE: {"message": "[Exact text message to copy]", "tone": "[Tone Label]", "explanation": "[1 brief sentence why this matches his learned preferences]", "situation": "${situation}", "styleTags": ["...", "..."], "lengthCategory": "short|medium|long"}]
+- In your visible response, provide a brief 1-2 sentence empathetic coach remark introducing your recommendation, but DO NOT write out Option 1/2/3. Keep the output clean, confident, and singular!
+`;
 
   return `You are Amelia AI, the personal Long-Distance Relationship companion and texting coach for a boyfriend communicating with his girlfriend, Amelia (Prudence).
 
@@ -190,6 +272,8 @@ FAVORITE THINGS QUICK REFERENCE:
 - STICKERS: CoCo the cactus (morning), Bubu & Dudu, Peach & Goma, Hello Kitty.
 - TOPICS SHE ENJOYS: Morning dream check-ins (loves hearing if she was in his dreams), future house planning, sleeping/bedroom arrangements, tease & laughter, knowing her photo is his lock screen/wallpaper.
 
+${learningDirective}
+
 CORE PERSONALITY & VOICE:
 - You are his trusted texting coach, wingman, and relationship advisor.
 - Down-to-earth, supportive, emotionally intelligent, honest, and non-judgmental.
@@ -198,20 +282,10 @@ CORE PERSONALITY & VOICE:
 - Use natural texting phrasing, subtle humor, lowercase typing where people naturally use it, light punctuation, and 1-2 subtle emojis only when fitting.
 - Never encourage manipulation, guilt-tripping, jealousy, or pressure.
 
-TEXT MESSAGE GENERATION RULES (CRITICAL):
-- Whenever the user asks what to text, what to reply, or wants message suggestions (e.g. "what should I say?", "give me something sweet", "make her laugh", "flirt with her", "how to reply to this photo"):
-  1. ALWAYS provide 3 to 5 distinct, ready-to-send text options (with diverse emotional vibes: e.g. playful banter, sweet & caring, flirty/passionate, observant check-in, or deep & thoughtful).
-  2. Every single option must be an ACTUAL realistic text message he can directly copy and send—NEVER an abstract explanation of what to write.
-  3. For each option, clearly explain its tone and why it works.
-  4. Format each option with quotes and structured tags:
-     Option 1: "[Actual message to copy]" - Tone - Brief why-it-works explanation
-     Also append: [SUGGESTED_REPLY: {"message": "[Exact text message]", "tone": "[Tone Label]", "explanation": "[Why it works]"}]
-     so the website displays interactive copy and transformation buttons!
-
 RESPONDING TO AMELIA'S MEDIA (MULTIMODAL):
-- IMAGES: Describe visible details accurately without making wild assumptions. Provide 3–5 natural text replies matching the vibe (compliment her genuine beauty/OOTD, tease playfully about food, show curiosity about her day).
-- VIDEOS: Analyze footage and audible dialogue. Summarize what happened, note key moments, and provide 3–5 tailored reactions and responses.
-- AUDIO / VOICE NOTES: Transcribe words, identify vocal tone, pacing, and emotional cues. Provide 3–5 natural responses answering what she said or matching her mood.
+- IMAGES: Describe visible details accurately without making wild assumptions. Provide one natural text reply matching the vibe.
+- VIDEOS: Analyze footage and audible dialogue. Summarize what happened, note key moments, and provide one tailored reaction.
+- AUDIO / VOICE NOTES: Transcribe words, identify vocal tone, pacing, and emotional cues. Provide one natural response.
 
 USER'S AUTHENTIC TEXTING PROFILE (MIMIC HIS VOICE):
 - Preferred Tone: ${profile.preferredTone}
@@ -230,7 +304,8 @@ ${datesContext}
 OUTPUT CONVENTIONS:
 - For memory details worth remembering, include:
 [MEMORY_SUGGESTION: {"category": "...", "title": "...", "content": "..."}]
-- For ready-to-send text options, provide 3 to 5 options formatted with quotes and [SUGGESTED_REPLY: ...] tags.
+- For the single recommended response, format with:
+[RECOMMENDED_RESPONSE: {"message": "[Exact text to copy]", "tone": "[Tone Label]", "explanation": "[Why it works based on preferences]", "situation": "${situation}", "styleTags": ["...", "..."], "lengthCategory": "short|medium|long"}]
 ${extraGoal ? `\nSPECIAL TASK FOCUS: ${extraGoal}` : ""}`;
 }
 
@@ -327,6 +402,7 @@ export async function chatWithAmeliaAI(
   }
 
   const userQuery = messages.filter((m) => m.role === "user").map((m) => m.content).slice(-3).join(" ");
+  const currentSituation = detectSituationContext(userQuery);
   let systemInstruction = await buildCoachSystemInstruction("", userQuery);
   if (preferences?.customInstruction) {
     systemInstruction += `\nUSER SPECIFIC OVERRIDE FOR THIS TURN: ${preferences.customInstruction}`;
@@ -367,8 +443,10 @@ export async function chatWithAmeliaAI(
 ${historyText}
 
 Please respond as Amelia AI. Provide empathetic, insightful, and natural guidance tailored to this long-distance relationship.
-If the user asks what to text, how to reply, or wants message ideas, ALWAYS provide 3 to 5 realistic, ready-to-send text options (with diverse emotional vibes: playful, sweet, flirty, observant, deep) formatted with quotes and [SUGGESTED_REPLY: {"message": "...", "tone": "...", "explanation": "..."}] tags.
-If analyzing media (images, audio, video), clearly explain what you perceive and suggest 3 to 5 natural replies.`,
+If the user asks what to text, how to reply, or wants message ideas, evaluate candidate replies against his learned preferences and provide ONLY your ONE HIGHEST-RANKED recommended response formatted with:
+[RECOMMENDED_RESPONSE: {"message": "[Exact text to copy and send]", "tone": "[Tone Label]", "explanation": "[1 brief sentence why this best fits his style and this moment]", "situation": "${currentSituation}", "styleTags": ["...", "..."], "lengthCategory": "short|medium|long"}]
+Do NOT overwhelm with multiple cards or a list of options. Give exactly ONE ideal recommendation.
+If analyzing media (images, audio, video), clearly explain what you perceive and suggest your single best recommendation.`,
   });
 
   const generationConfig: Record<string, any> = {};
@@ -411,7 +489,7 @@ If analyzing media (images, audio, video), clearly explain what you perceive and
     const replyText = response.output_text || "I'm right here with you. What's on your mind regarding Amelia?";
 
     // Extract suggested replies & memory tags
-    const { cleanText, suggestedReplies, suggestedMemories } = parseAIOutput(replyText);
+    const { cleanText, suggestedReplies, suggestedMemories } = parseAIOutput(replyText, currentSituation);
 
     return {
       reply: cleanText,
@@ -426,9 +504,13 @@ If analyzing media (images, audio, video), clearly explain what you perceive and
 }
 
 /**
- * Extracts structured suggested replies and memory suggestions from AI text
+ * Extracts structured suggested replies and memory suggestions from AI text.
+ * Enforces YouTube-style single recommendation (returns at most 1 item).
  */
-function parseAIOutput(text: string): {
+function parseAIOutput(
+  text: string,
+  defaultSituation: SituationContext = "general"
+): {
   cleanText: string;
   suggestedReplies: SuggestedReply[];
   suggestedMemories: ExtractedMemorySuggestion[];
@@ -437,7 +519,7 @@ function parseAIOutput(text: string): {
   let suggestedMemories: ExtractedMemorySuggestion[] = [];
 
   // 1. Look for memory suggestion tags
-  const memoryMatches = [...text.matchAll(/\[MEMORY_SUGGESTION:\s*({[^}]+})\]/g)];
+  const memoryMatches = [...text.matchAll(/\[MEMORY_SUGGESTION:\s*({[\s\S]*?})\]/g)];
   suggestedMemories = memoryMatches.map((m) => {
     try {
       return JSON.parse(m[1]);
@@ -446,29 +528,65 @@ function parseAIOutput(text: string): {
     }
   }).filter(Boolean) as ExtractedMemorySuggestion[];
 
-  // 2. Look for structured suggested reply tags: [SUGGESTED_REPLY: {"message": "...", "tone": "...", "explanation": "..."}]
-  const replyTags = [...text.matchAll(/\[SUGGESTED_REPLY:\s*({[^}]+})\]/g)];
-  for (const m of replyTags) {
+  // 2. Look for structured single recommended response tag:
+  // [RECOMMENDED_RESPONSE: {"message": "...", "tone": "...", "explanation": "...", "situation": "...", "styleTags": [...], "lengthCategory": "..."}]
+  const recommendedTags = [...text.matchAll(/\[RECOMMENDED_RESPONSE:\s*({[\s\S]*?})\]/g)];
+  for (const m of recommendedTags) {
     try {
       const parsed = JSON.parse(m[1]);
       if (parsed.message && !suggestedReplies.some((r) => r.message === parsed.message)) {
+        const msg = parsed.message.trim();
+        const lenCat: "short" | "medium" | "long" =
+          parsed.lengthCategory ||
+          (msg.length < 55 ? "short" : msg.length < 135 ? "medium" : "long");
         suggestedReplies.push({
-          message: parsed.message,
+          id: `rec_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          message: msg,
           tone: parsed.tone || "Natural & Warm",
-          explanation: parsed.explanation || "Suggested text you can send to Amelia.",
+          explanation: parsed.explanation || "Recommended text tailored to your style and relationship.",
+          situation: (parsed.situation as SituationContext) || defaultSituation,
+          styleTags: Array.isArray(parsed.styleTags) ? parsed.styleTags : [parsed.tone || "Natural"],
+          lengthCategory: lenCat,
+          rating: null,
         });
       }
     } catch {}
   }
 
+  // 3. Fallback to legacy tag: [SUGGESTED_REPLY: {"message": "...", "tone": "...", "explanation": "..."}]
+  if (suggestedReplies.length === 0) {
+    const replyTags = [...text.matchAll(/\[SUGGESTED_REPLY:\s*({[\s\S]*?})\]/g)];
+    for (const m of replyTags) {
+      try {
+        const parsed = JSON.parse(m[1]);
+        if (parsed.message && !suggestedReplies.some((r) => r.message === parsed.message)) {
+          const msg = parsed.message.trim();
+          const lenCat: "short" | "medium" | "long" =
+            msg.length < 55 ? "short" : msg.length < 135 ? "medium" : "long";
+          suggestedReplies.push({
+            id: `rec_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            message: msg,
+            tone: parsed.tone || "Natural & Warm",
+            explanation: parsed.explanation || "Suggested text you can send to Amelia.",
+            situation: defaultSituation,
+            styleTags: [parsed.tone || "Natural"],
+            lengthCategory: lenCat,
+            rating: null,
+          });
+        }
+      } catch {}
+    }
+  }
+
   // Remove tags from clean display text
   let cleanText = text
-    .replace(/\[MEMORY_SUGGESTION:\s*{[^}]+}\]/g, "")
-    .replace(/\[SUGGESTED_REPLY:\s*{[^}]+}\]/g, "")
+    .replace(/\[MEMORY_SUGGESTION:\s*{[\s\S]*?}\]/g, "")
+    .replace(/\[RECOMMENDED_RESPONSE:\s*{[\s\S]*?}\]/g, "")
+    .replace(/\[SUGGESTED_REPLY:\s*{[\s\S]*?}\]/g, "")
     .trim();
 
-  // 3. Fallback regex to capture bulleted/quoted suggestions if tags weren't emitted
-  if (suggestedReplies.length < 3) {
+  // 4. Fallback regex to capture bulleted/quoted suggestions if tags weren't emitted
+  if (suggestedReplies.length === 0) {
     const replyPattern = /(?:Option \d+|Idea \d+|Suggestion \d+|\d+\.)?\s*[:\-—]?\s*"([^"]{4,})"(?:\s*[-—|•]\s*([^\n\r]+))?/gi;
     const replyMatches = [...cleanText.matchAll(replyPattern)];
 
@@ -487,15 +605,27 @@ function parseAIOutput(text: string): {
           tone = meta;
         }
 
-        // Avoid duplicates
         if (!suggestedReplies.some((r) => r.message === message)) {
-          suggestedReplies.push({ message, tone, explanation });
+          const lenCat: "short" | "medium" | "long" =
+            message.length < 55 ? "short" : message.length < 135 ? "medium" : "long";
+          suggestedReplies.push({
+            id: `rec_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            message,
+            tone,
+            explanation,
+            situation: defaultSituation,
+            styleTags: [tone],
+            lengthCategory: lenCat,
+            rating: null,
+          });
+          break; // Only capture 1 recommendation
         }
       }
     }
   }
 
-  return { cleanText, suggestedReplies: suggestedReplies.slice(0, 5), suggestedMemories };
+  // CRITICAL REQUIREMENT: Return at most ONE recommended response
+  return { cleanText, suggestedReplies: suggestedReplies.slice(0, 1), suggestedMemories };
 }
 
 // ==========================================
@@ -525,30 +655,18 @@ function getUnifiedDemoResponse(
 
 🎙️ **Audio Recording Analysis:**
 - **Spoken Content:** Amelia is talking in an energetic, conversational tone about wrapping up a busy day and wanting to unwind.
-- **Emotional Tone:** Relaxed, warm, and engaged. There is light laughter in the middle of the recording indicating good spirits.
-- **Long-Distance Context:** Asynchronous voice notes are such an important lifeline in a long-distance relationship. Hearing her voice brings you closer.
-
-Here are 4 natural text replies you can send back:`,
+- **Emotional Tone:** Relaxed, warm, and engaged. There is light laughter indicating good spirits.
+- **Coach Recommendation:** Validate her day and invite her to relax without putting pressure on her to keep up a high-energy conversation.`,
       suggestedReplies: [
         {
+          id: `rec_demo_audio_${Date.now()}`,
           message: "Just listened to your voice note haha! You sounded so exhausted earlier, please tell me you're finally kicking back on the couch.",
           tone: "Warm & Attentive",
           explanation: "Shows you listened to her voice and validates her need to relax.",
-        },
-        {
-          message: "Hearing your voice just made my whole afternoon better honestly. Hope your evening is peaceful!",
-          tone: "Sweet & Affectionate",
-          explanation: "Expresses genuine appreciation without being overly dramatic.",
-        },
-        {
-          message: "Your laugh in that voice note made me smile so much haha. Miss hearing you in person!",
-          tone: "Flirty & Playful",
-          explanation: "Highlights a sweet detail and tenderly acknowledges missing her.",
-        },
-        {
-          message: "Send me another one whenever you're winding down later! Loved hearing your voice.",
-          tone: "Encouraging",
-          explanation: "Reinforces healthy long-distance voice communication.",
+          situation: "comforting_supportive",
+          styleTags: ["Attentive", "Warm", "Low Pressure"],
+          lengthCategory: "medium",
+          rating: null,
         },
       ],
       isDemo: true,
@@ -560,31 +678,19 @@ Here are 4 natural text replies you can send back:`,
       reply: `[Amelia AI Demo Mode — Live Gemini Video Understanding will activate with your API key]
 
 🎬 **Video Content Analysis:**
-- **Visuals & Dialogue:** The video shows an everyday, playful clip (e.g. her cute surroundings, sunset, or something funny from her day).
-- **Vibe:** Candid, spontaneous, and sharing a moment of her world with you across the distance.
-- **Recommendation:** Acknowledge the specific highlight and tease or compliment her naturally.
-
-Here are 4 quick texts to send back:`,
+- **Visuals & Dialogue:** The video shows an everyday, playful clip sharing a spontaneous moment of her world with you.
+- **Vibe:** Candid, fun, and warm across the distance.
+- **Coach Recommendation:** Acknowledge the highlight and tease her gently to spark fun banter.`,
       suggestedReplies: [
         {
+          id: `rec_demo_video_${Date.now()}`,
           message: "Wait that is actually hilarious haha! Where was that taken?",
           tone: "Playful & Curious",
           explanation: "Engages directly with the video and prompts a fun story.",
-        },
-        {
-          message: "Loved this! Thanks for sharing it with me, definitely brought the biggest smile to my face.",
-          tone: "Sweet & Appreciative",
-          explanation: "Encourages her to keep sharing her daily world with you.",
-        },
-        {
-          message: "You looked so cute in this clip honestly haha. Wish I was right there with you!",
-          tone: "Flirty & Affectionate",
-          explanation: "Compliments her genuinely while bridging the distance.",
-        },
-        {
-          message: "Adding that spot to our list for when I come visit you next!",
-          tone: "Future Plans",
-          explanation: "Builds excitement for your next in-person trip.",
+          situation: "playful_funny",
+          styleTags: ["Playful", "Banter", "Curious"],
+          lengthCategory: "short",
+          rating: null,
         },
       ],
       isDemo: true,
@@ -598,29 +704,17 @@ Here are 4 quick texts to send back:`,
 📱 **Image / Screenshot Analysis:**
 - **Current Situation:** Amelia shared an image of her day. Her tone is open, receptive, and wanting to connect.
 - **Her Possible Headspace:** Warm and comfortable sharing her world with you.
-- **Actionable Advice:** Keep the conversational momentum going with lighthearted curiosity, a sweet compliment, or playful banter.
-
-Here are 4 natural text responses tailored to your voice:`,
+- **Coach Recommendation:** Keep the conversational momentum going with lighthearted curiosity and supportive warmth.`,
       suggestedReplies: [
         {
+          id: `rec_demo_image_${Date.now()}`,
           message: "Haha that's so you! Tell me you at least got a chance to grab a coffee first?",
           tone: "Playful & Observant",
           explanation: "Friendly teasing that invites an easy continuation.",
-        },
-        {
-          message: "Honestly so proud of how you handled that today. You definitely deserve a relaxing evening.",
-          tone: "Supportive & Sweet",
-          explanation: "Makes her feel seen and respected across distance.",
-        },
-        {
-          message: "You look so pretty here amel honestly haha. Made my whole day seeing this.",
-          tone: "Affectionate Compliment",
-          explanation: "Direct, genuine, and romantic without feeling forced.",
-        },
-        {
-          message: "That looks amazing! We definitely gotta do that together when we see each other next.",
-          tone: "Future Trip Connection",
-          explanation: "Anchors her photo to future shared memories in person.",
+          situation: "playful_funny",
+          styleTags: ["Observant", "Casual Tease"],
+          lengthCategory: "short",
+          rating: null,
         },
       ],
       suggestedMemories: [
@@ -639,29 +733,17 @@ Here are 4 natural text responses tailored to your voice:`,
     return {
       reply: `[Amelia AI Demo Mode]
 
-Missing Amelia is natural when you're long-distance. The key to sending a great "I miss you" text is keeping it warm, grounded, and specific—not heavy, sad, or guilt-inducing.
-
-Here are 4 sweet, genuine ways to tell her you miss her:`,
+Missing Amelia is completely natural when you're long-distance. The key to sending a great "I miss you" text is keeping it warm, grounded, and specific—not heavy, sad, or guilt-inducing.`,
       suggestedReplies: [
         {
+          id: `rec_demo_miss_${Date.now()}`,
           message: "Was just sitting here thinking about you and wishing I could give you a hug right now haha. Hope your day is going well amel",
           tone: "Sweet & Grounded",
           explanation: "Warm and affectionate without creating pressure or sadness.",
-        },
-        {
-          message: "Just saw someone with an iced matcha and immediately missed you haha. Counting down the days until our next trip!",
-          tone: "Inside Reference & Future Trip",
-          explanation: "References her favorite drink and keeps focus on your next visit.",
-        },
-        {
-          message: "No real reason for this text other than I miss your face today ❤️",
-          tone: "Short & Playful",
-          explanation: "Effortless, low pressure, and guaranteed to make her smile.",
-        },
-        {
-          message: "Wish you were sitting right next to me right now honestly. How's your afternoon looking?",
-          tone: "Intimate & Conversational",
-          explanation: "Expresses physical longing then smoothly transitions into everyday conversation.",
+          situation: "romantic",
+          styleTags: ["Sweet", "Grounded", "Affectionate"],
+          lengthCategory: "medium",
+          rating: null,
         },
       ],
       isDemo: true,
@@ -672,29 +754,17 @@ Here are 4 sweet, genuine ways to tell her you miss her:`,
     return {
       reply: `[Amelia AI Demo Mode]
 
-Long-distance dates keep things exciting! You don't just have to sit on FaceTime asking questions.
-
-Here are 4 creative virtual date ideas + invitation texts you can send Amelia:`,
+Long-distance dates keep things exciting and intimate! Recreating shared movie or gaming nights bridges the distance effortlessly.`,
       suggestedReplies: [
         {
+          id: `rec_demo_date_${Date.now()}`,
           message: "Hey! What do you think about doing a cozy movie date night tonight? We can sync up a film on Teleparty and grab snacks. Let me know what you're in the mood to watch!",
           tone: "Watch Party Date",
-          explanation: "Low-stress, fun, and easy to set up with popcorn.",
-        },
-        {
-          message: "Let's do a proper dinner date this week! How about we both order takeout or cook something on FaceTime Friday? I'd love to sit down and have dinner with you.",
-          tone: "Virtual Dinner Date",
-          explanation: "Recreates the feeling of dining together.",
-        },
-        {
-          message: "Found a hilarious couple question game today. Want to get cozy on call tonight and answer a few together? Promise to go easy on you haha.",
-          tone: "Question Game Night",
-          explanation: "Deepens emotional intimacy through playful questions.",
-        },
-        {
-          message: "Let's do a Spotify Jam tonight while we both work or wind down! I want to share a few songs that made me think of you today.",
-          tone: "Shared Music Jam",
-          explanation: "Asynchronous or live shared music listening.",
+          explanation: "Low-stress, fun, and easy to set up with snacks.",
+          situation: "romantic",
+          styleTags: ["Virtual Date", "Low Stress", "Excited"],
+          lengthCategory: "medium",
+          rating: null,
         },
       ],
       isDemo: true,
@@ -705,29 +775,17 @@ Here are 4 creative virtual date ideas + invitation texts you can send Amelia:`,
   return {
     reply: `[Amelia AI Demo Mode]
 
-In a long-distance relationship, staying connected is all about keeping communication effortless, genuine, and engaging.
-
-Here are 4 ready-to-send texts tailored to your style:`,
+In a long-distance relationship, staying connected is all about keeping communication effortless, genuine, and authentic to your voice. Here is your recommended text:`,
     suggestedReplies: [
       {
+        id: `rec_demo_def_${Date.now()}`,
         message: "Hey! Just wanted to send a quick hello and see how your morning is treating you :)",
         tone: "Casual & Sweet",
-        explanation: "Simple, zero-pressure check-in.",
-      },
-      {
-        message: "Random thought: what's the first thing we're doing the second I see you next trip?",
-        tone: "Playful & Anticipatory",
-        explanation: "Builds excitement for your upcoming visit.",
-      },
-      {
-        message: "Saw something that reminded me of that funny waddle thing you do when you're cold haha, made me smile",
-        tone: "Inside Joke & Affectionate",
-        explanation: "References a shared memory and brings a smile.",
-      },
-      {
-        message: "Hope you're not letting work stress you out too much today! You got this, got your back always.",
-        tone: "Supportive Partner",
-        explanation: "Reassures her that you are in her corner despite the miles.",
+        explanation: "Simple, zero-pressure check-in tailored to your profile.",
+        situation: "morning_night",
+        styleTags: ["Casual", "Sweet", "Low Pressure"],
+        lengthCategory: "short",
+        rating: null,
       },
     ],
     isDemo: true,
