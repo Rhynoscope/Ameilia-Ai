@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { SuggestedReply, SituationContext } from "@/lib/types";
+import React, { useState, useEffect } from "react";
+import { SuggestedReply } from "@/lib/types";
 import { SITUATION_DEFINITIONS } from "@/lib/constants";
 import {
   Check,
@@ -11,26 +11,92 @@ import {
   ThumbsUp,
   ThumbsDown,
   Info,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+
+interface ReplyVersion {
+  message: string;
+  tone: string;
+  explanation?: string;
+  label?: string;
+  rating?: "like" | "dislike" | null;
+}
 
 interface ReplyCardProps {
   reply: SuggestedReply;
   conversationId?: string;
-  onPersonalized?: (newMessage: string) => void;
+  conversationContext?: string;
+  onPersonalized?: (newMessage: string, updatedReply?: SuggestedReply) => void;
 }
 
-export function ReplyCard({ reply, conversationId, onPersonalized }: ReplyCardProps) {
+export function ReplyCard({
+  reply,
+  conversationId,
+  conversationContext,
+  onPersonalized,
+}: ReplyCardProps) {
   const [copied, setCopied] = useState(false);
   const [transformingStyle, setTransformingStyle] = useState<string | null>(null);
-  const [currentMessage, setCurrentMessage] = useState(reply.message);
-  const [currentTone, setCurrentTone] = useState(reply.tone || "Natural & Warm");
 
-  // Feedback state
-  const [rating, setRating] = useState<"like" | "dislike" | null>(reply.rating || null);
+  const [versions, setVersions] = useState<ReplyVersion[]>(() => {
+    const initVersions = reply.versions;
+    if (Array.isArray(initVersions) && initVersions.length > 0) {
+      return initVersions.map((v, i) => ({
+        message: v.message,
+        tone: v.tone || reply.tone || "Natural & Warm",
+        explanation: v.explanation || reply.explanation,
+        label: v.label || `Version ${i + 1}`,
+        rating:
+          i === (reply.activeVersionIndex ?? initVersions.length - 1)
+            ? reply.rating || null
+            : null,
+      }));
+    }
+    return [
+      {
+        message: reply.message,
+        tone: reply.tone || "Natural & Warm",
+        explanation: reply.explanation,
+        label: "Original",
+        rating: reply.rating || null,
+      },
+    ];
+  });
+
+  const [versionIdx, setVersionIdx] = useState<number>(() =>
+    reply.activeVersionIndex !== undefined
+      ? Math.min(reply.activeVersionIndex, Math.max(0, (reply.versions?.length || 1) - 1))
+      : Math.max(0, (reply.versions?.length || 1) - 1)
+  );
+
+  // Sync if parent updates reply prop directly
+  useEffect(() => {
+    if (
+      reply.message &&
+      !versions.some((v) => v.message.trim() === reply.message.trim())
+    ) {
+      const next: ReplyVersion = {
+        message: reply.message,
+        tone: reply.tone || "Fresh Match",
+        explanation: reply.explanation,
+        label: `Version ${versions.length + 1}`,
+        rating: reply.rating || null,
+      };
+      setVersions((prev) => [...prev, next]);
+      setVersionIdx(versions.length);
+    }
+  }, [reply.message]);
+
+  const activeVersion = versions[versionIdx] || versions[versions.length - 1];
+  const currentMessage = activeVersion.message;
+  const currentTone = activeVersion.tone;
+  const currentExplanation = activeVersion.explanation ?? reply.explanation;
+  const rating = activeVersion.rating || null;
+
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
 
-  // Situation metadata lookup
   const situationMeta =
     SITUATION_DEFINITIONS.find((s) => s.id === reply.situation) ||
     SITUATION_DEFINITIONS.find((s) => s.id === "general") ||
@@ -41,18 +107,80 @@ export function ReplyCard({ reply, conversationId, onPersonalized }: ReplyCardPr
       await navigator.clipboard.writeText(currentMessage);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback
+    } catch {}
+  };
+
+  const setCurrentVersionRating = (newRating: "like" | "dislike" | null) => {
+    setVersions((prev) =>
+      prev.map((v, i) => (i === versionIdx ? { ...v, rating: newRating } : v))
+    );
+  };
+
+  const handleTransform = async (
+    styleId: string,
+    label: string,
+    extraDislikedTraits?: string[]
+  ) => {
+    if (transformingStyle) return;
+    setTransformingStyle(styleId);
+
+    try {
+      const allPreviousTexts = versions.map((v) => v.message);
+      const res = await fetch("/api/improve-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: currentMessage,
+          styleId,
+          previousVersions: allPreviousTexts,
+          conversationContext,
+          dislikedTraits: extraDislikedTraits,
+          situationContext: reply.situation || "general",
+        }),
+      });
+
+      const data: any = await res.json();
+      if (data.improved) {
+        const nextVer: ReplyVersion = {
+          message: data.improved,
+          tone: data.tone || label,
+          explanation: data.reasoning || currentExplanation,
+          label: `${label} (#${versions.length + 1})`,
+          rating: null,
+        };
+        const nextList = [...versions, nextVer];
+        const nextIndex = nextList.length - 1;
+        setVersions(nextList);
+        setVersionIdx(nextIndex);
+
+        if (onPersonalized) {
+          onPersonalized(data.improved, {
+            ...reply,
+            message: data.improved,
+            tone: nextVer.tone,
+            explanation: nextVer.explanation || reply.explanation,
+            rating: null,
+            versions: nextList,
+            activeVersionIndex: nextIndex,
+          });
+        }
+      }
+    } catch (e) {
+      console.error("Transform error:", e);
+      setFeedbackToast("⚠️ Couldn't generate new version, please try again.");
+      setTimeout(() => setFeedbackToast(null), 3000);
+    } finally {
+      setTransformingStyle(null);
     }
   };
 
   const handleFeedback = async (newRating: "like" | "dislike") => {
-    // If user clicks the already selected rating, do nothing (deduplication)
-    if (rating === newRating || feedbackLoading) return;
+    if (feedbackLoading || transformingStyle) return;
+    if (rating === "like" && newRating === "like") return;
 
     setFeedbackLoading(true);
     const previousRating = rating;
-    setRating(newRating);
+    setCurrentVersionRating(newRating);
 
     try {
       const res = await fetch("/api/preferences/feedback", {
@@ -66,7 +194,7 @@ export function ReplyCard({ reply, conversationId, onPersonalized }: ReplyCardPr
           tone: currentTone,
           styleTags: reply.styleTags || [currentTone],
           lengthCategory: reply.lengthCategory || "medium",
-          reasoning: reply.explanation,
+          reasoning: currentExplanation,
         }),
       });
 
@@ -74,23 +202,21 @@ export function ReplyCard({ reply, conversationId, onPersonalized }: ReplyCardPr
         throw new Error("Failed to record feedback");
       }
 
-      const data = await res.json();
-
       if (newRating === "like") {
-        setFeedbackToast("👍 Liked! Learning what you enjoy.");
+        setFeedbackToast("Saved to your Liked style profile! Future messages will match this vibe.");
         setTimeout(() => setFeedbackToast(null), 3500);
       } else {
-        setFeedbackToast("👎 Disliked! Generating an alternative...");
-        // Dislike triggers quick automatic replacement to fix the issue
-        setTimeout(async () => {
-          setFeedbackToast(null);
-          await handleTransform("regenerate", "Replacement Match");
-        }, 1200);
+        setFeedbackToast("Dislike saved! Generating a fresh replacement with a different approach...");
+        await handleTransform("dislike_replace", "Better Match", [
+          `Avoid the tone "${currentTone}"`,
+          `Avoid phrasing like "${currentMessage.slice(0, 80)}"`,
+        ]);
+        setFeedbackToast("Replaced with a fresh recommendation! Use ◀ ▶ to view earlier versions.");
+        setTimeout(() => setFeedbackToast(null), 3800);
       }
     } catch (err) {
       console.error("Feedback error:", err);
-      // Revert rating on error
-      setRating(previousRating);
+      setCurrentVersionRating(previousRating);
       setFeedbackToast("⚠️ Couldn't save feedback, please try again.");
       setTimeout(() => setFeedbackToast(null), 3000);
     } finally {
@@ -98,73 +224,72 @@ export function ReplyCard({ reply, conversationId, onPersonalized }: ReplyCardPr
     }
   };
 
-  const handleTransform = async (styleId: string, label: string) => {
-    if (transformingStyle) return;
-    setTransformingStyle(styleId);
-
-    try {
-      const res = await fetch("/api/improve-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: currentMessage,
-          styleId,
-        }),
-      });
-
-      const data: any = await res.json();
-      if (data.improved) {
-        setCurrentMessage(data.improved);
-        setCurrentTone(label);
-        // Reset feedback for the new transformed message
-        setRating(null);
-        if (onPersonalized) onPersonalized(data.improved);
-      }
-    } catch (e) {
-      console.error("Transform error:", e);
-    } finally {
-      setTransformingStyle(null);
-    }
-  };
-
   return (
-    <div className="bg-white border-2 border-pink-200/90 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all duration-200 space-y-3.5">
-      {/* Top Header: Situation Pill, Tone Tag, Copy */}
+    <div className="bg-[#fffdf7] border-[3px] border-black rounded-2xl p-3.5 sm:p-4 shadow-[0_5px_0_#000] transition-all duration-200 space-y-3">
+      {/* Top Header: Situation Pill, Tone Tag, Version Switcher, Copy */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
-          {/* Situation Badge */}
           {situationMeta && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-pink-100 text-romantic-700 border border-pink-200">
+            <span className="inline-flex items-center gap-1 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-[#ffe033] text-black border-2 border-black shadow-[0_2px_0_#000]">
               <span>{situationMeta.icon}</span>
               <span>{situationMeta.label}</span>
             </span>
           )}
 
-          {/* Tone Label */}
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200">
-            <Sparkles className="w-3 h-3 text-romantic-500" />
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#eef2ff] text-[#1e1b4b] border-2 border-black">
+            <Sparkles className="w-3 h-3 text-[#6d28d9]" />
             {currentTone}
           </span>
+
+          {/* Version History Switcher */}
+          {versions.length > 1 && (
+            <div className="inline-flex items-center gap-1 bg-[#261c7a] text-white text-[11px] font-black px-2 py-0.5 rounded-full border-2 border-black shadow-[0_2px_0_#000]">
+              <button
+                type="button"
+                onClick={() => setVersionIdx((i) => Math.max(0, i - 1))}
+                disabled={versionIdx === 0}
+                className="hover:text-[#ffe033] disabled:opacity-35 p-0.5"
+                title="Previous generated version"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <span className="px-1 select-none">
+                {versionIdx + 1} / {versions.length}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setVersionIdx((i) => Math.min(versions.length - 1, i + 1))
+                }
+                disabled={versionIdx === versions.length - 1}
+                className="hover:text-[#ffe033] disabled:opacity-35 p-0.5"
+                title="Next generated version"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Copy Button */}
         <button
+          type="button"
           onClick={handleCopy}
-          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl font-semibold transition active:scale-95 ${
+          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl font-extrabold border-2 border-black shadow-[0_3px_0_#000] transition active:translate-y-0.5 ${
             copied
-              ? "bg-emerald-600 text-white shadow-sm"
-              : "bg-pink-50 hover:bg-pink-100 text-romantic-700 border border-pink-200"
+              ? "bg-[#38e54d] text-[#05290a]"
+              : "bg-[#ff6bd6] hover:bg-[#ff85de] text-black"
           }`}
           title="Copy text message to clipboard"
         >
           {copied ? (
             <>
-              <Check className="w-3.5 h-3.5 text-white" />
+              <Check className="w-3.5 h-3.5" />
               <span>Copied!</span>
             </>
           ) : (
             <>
-              <Copy className="w-3.5 h-3.5 text-romantic-500" />
+              <Copy className="w-3.5 h-3.5" />
               <span>Copy Text</span>
             </>
           )}
@@ -172,80 +297,77 @@ export function ReplyCard({ reply, conversationId, onPersonalized }: ReplyCardPr
       </div>
 
       {/* Recommended Message Text Bubble */}
-      <div className="relative p-4 rounded-xl bg-gradient-to-br from-pink-50/60 to-rose-50/40 border border-pink-200/70 text-gray-950 text-[15px] font-medium leading-relaxed select-text shadow-inner">
+      <div className="relative p-3.5 sm:p-4 rounded-xl bg-white border-[2.5px] border-black text-[#111827] text-[15px] font-semibold leading-relaxed select-text shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)]">
         {transformingStyle && (
-          <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px] rounded-xl flex items-center justify-center gap-2 text-xs font-semibold text-romantic-700 z-10">
-            <RefreshCw className="w-4 h-4 animate-spin text-romantic-600" />
-            <span>Refining recommendation...</span>
+          <div className="absolute inset-0 bg-[#fffdf7]/90 backdrop-blur-[2px] rounded-xl flex items-center justify-center gap-2 text-xs font-extrabold text-[#261c7a] z-10">
+            <RefreshCw className="w-4 h-4 animate-spin text-[#ff4b72]" />
+            <span>
+              {transformingStyle === "dislike_replace"
+                ? "Crafting a better replacement..."
+                : "Generating fresh version..."}
+            </span>
           </div>
         )}
-        <p className="whitespace-pre-wrap select-all">"{currentMessage}"</p>
+        <p className="whitespace-pre-wrap select-all break-words">
+          &ldquo;{currentMessage}&rdquo;
+        </p>
       </div>
 
       {/* Explanation note */}
-      {reply.explanation && (
-        <p className="text-xs text-gray-600 flex items-start gap-1.5 italic">
-          <Info className="w-3.5 h-3.5 text-romantic-400 mt-0.5 flex-shrink-0" />
-          <span>{reply.explanation}</span>
+      {currentExplanation && (
+        <p className="text-xs text-[#374151] font-medium flex items-start gap-1.5">
+          <Info className="w-3.5 h-3.5 text-[#3529a8] mt-0.5 shrink-0" />
+          <span>{currentExplanation}</span>
         </p>
       )}
 
-      {/* YouTube-Style Feedback Row: 👍 Like & 👎 Dislike */}
-      <div className="pt-2 border-t border-pink-100 space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">
-              Feedback:
-            </span>
-
+      {/* Feedback & Regenerate Row */}
+      <div className="pt-2 border-t-2 border-dashed border-black/20 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Like Button */}
             <button
+              type="button"
               onClick={() => handleFeedback("like")}
-              disabled={feedbackLoading}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+              disabled={feedbackLoading || Boolean(transformingStyle)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold border-2 border-black shadow-[0_2px_0_#000] transition-all active:translate-y-0.5 ${
                 rating === "like"
-                  ? "bg-emerald-500 text-white shadow-sm ring-2 ring-emerald-300"
-                  : "bg-gray-100 hover:bg-emerald-50 text-gray-700 hover:text-emerald-700 border border-gray-200 hover:border-emerald-300"
+                  ? "bg-[#38e54d] text-[#05290a]"
+                  : "bg-white hover:bg-[#dcffe2] text-[#111827]"
               }`}
               title="Like: Learn and recommend similar styles in the future"
             >
-              <ThumbsUp
-                className={`w-3.5 h-3.5 ${
-                  rating === "like" ? "fill-white text-white" : ""
-                }`}
-              />
-              <span>{rating === "like" ? "Liked" : "Like"}</span>
+              <ThumbsUp className="w-3.5 h-3.5" />
+              <span>{rating === "like" ? "Liked!" : "Like"}</span>
             </button>
 
             {/* Dislike Button */}
             <button
+              type="button"
               onClick={() => handleFeedback("dislike")}
-              disabled={feedbackLoading}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+              disabled={feedbackLoading || Boolean(transformingStyle)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold border-2 border-black shadow-[0_2px_0_#000] transition-all active:translate-y-0.5 ${
                 rating === "dislike"
-                  ? "bg-rose-500 text-white shadow-sm ring-2 ring-rose-300"
-                  : "bg-gray-100 hover:bg-rose-50 text-gray-700 hover:text-rose-700 border border-gray-200 hover:border-rose-300"
+                  ? "bg-[#ff5252] text-white"
+                  : "bg-white hover:bg-[#ffe3e3] text-[#111827]"
               }`}
-              title="Dislike: Learn to avoid this tone/style and generate a replacement"
+              title="Dislike: Learn to avoid this tone/style and immediately replace with a new version"
             >
-              <ThumbsDown
-                className={`w-3.5 h-3.5 ${
-                  rating === "dislike" ? "fill-white text-white" : ""
-                }`}
-              />
+              <ThumbsDown className="w-3.5 h-3.5" />
               <span>{rating === "dislike" ? "Disliked" : "Dislike"}</span>
             </button>
           </div>
 
           {/* Regenerate Button */}
           <button
+            type="button"
             onClick={() => handleTransform("regenerate", "Fresh Variation")}
             disabled={Boolean(transformingStyle)}
-            className="text-[11.5px] font-semibold text-romantic-600 hover:text-romantic-800 flex items-center gap-1 disabled:opacity-50 transition active:scale-95"
-            title="Generate a completely fresh recommendation"
+            className="px-3 py-1.5 rounded-xl text-xs font-extrabold bg-[#3ecbff] hover:bg-[#6cdaff] text-black border-2 border-black shadow-[0_2px_0_#000] flex items-center gap-1.5 disabled:opacity-50 transition active:translate-y-0.5"
+            title="Generate a completely fresh recommendation (keeps version history)"
           >
             <RefreshCw
-              className={`w-3 h-3 ${
+              className={`w-3.5 h-3.5 ${
                 transformingStyle === "regenerate" ? "animate-spin" : ""
               }`}
             />
@@ -255,61 +377,61 @@ export function ReplyCard({ reply, conversationId, onPersonalized }: ReplyCardPr
 
         {/* Feedback confirmation toast / indicator */}
         {feedbackToast && (
-          <div className="text-[11.5px] font-semibold text-gray-700 bg-pink-50 border border-pink-200 rounded-lg px-2.5 py-1 animate-fade-in flex items-center gap-1.5">
-            <Sparkles className="w-3 h-3 text-romantic-500" />
+          <div className="text-[11.5px] font-bold text-[#1e1b4b] bg-[#ffe033] border-2 border-black rounded-xl px-3 py-1.5 shadow-[0_2px_0_#000] flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-black shrink-0" />
             <span>{feedbackToast}</span>
           </div>
         )}
 
         {/* Quick Tweaks: Shorter, Longer, Funnier, Sweeter, Sound Like Me */}
-        <div className="pt-1.5 flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] font-semibold text-gray-600 mr-1">
+        <div className="pt-1 flex flex-wrap items-center gap-1.5">
+          <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-600 mr-1">
             Quick Tweaks:
           </span>
 
           <button
+            type="button"
             onClick={() => handleTransform("shorter", "Shorter & Punchy")}
             disabled={Boolean(transformingStyle)}
-            className="text-[11px] font-medium px-2 py-0.5 rounded-lg bg-gray-50 hover:bg-pink-50 border border-gray-200 hover:border-pink-200 text-gray-700 hover:text-romantic-600 transition flex items-center gap-1 disabled:opacity-50"
-            title="Make shorter and more concise"
+            className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white hover:bg-[#ffe033] border-2 border-black text-black shadow-[0_2px_0_#000] active:translate-y-0.5 transition disabled:opacity-50"
           >
-            <span>✂️ Shorter</span>
+            ✂️ Shorter
           </button>
 
           <button
+            type="button"
             onClick={() => handleTransform("longer", "More Detail")}
             disabled={Boolean(transformingStyle)}
-            className="text-[11px] font-medium px-2 py-0.5 rounded-lg bg-gray-50 hover:bg-pink-50 border border-gray-200 hover:border-pink-200 text-gray-700 hover:text-romantic-600 transition flex items-center gap-1 disabled:opacity-50"
-            title="Expand with more detail"
+            className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white hover:bg-[#ffe033] border-2 border-black text-black shadow-[0_2px_0_#000] active:translate-y-0.5 transition disabled:opacity-50"
           >
-            <span>📝 Longer</span>
+            📝 Longer
           </button>
 
           <button
+            type="button"
             onClick={() => handleTransform("funnier", "Funnier & Playful")}
             disabled={Boolean(transformingStyle)}
-            className="text-[11px] font-medium px-2 py-0.5 rounded-lg bg-gray-50 hover:bg-pink-50 border border-gray-200 hover:border-pink-200 text-gray-700 hover:text-romantic-600 transition flex items-center gap-1 disabled:opacity-50"
-            title="Add playful humor"
+            className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white hover:bg-[#ffe033] border-2 border-black text-black shadow-[0_2px_0_#000] active:translate-y-0.5 transition disabled:opacity-50"
           >
-            <span>😂 Funnier</span>
+            😂 Funnier
           </button>
 
           <button
+            type="button"
             onClick={() => handleTransform("sweeter", "Sweeter & Caring")}
             disabled={Boolean(transformingStyle)}
-            className="text-[11px] font-medium px-2 py-0.5 rounded-lg bg-gray-50 hover:bg-pink-50 border border-gray-200 hover:border-pink-200 text-gray-700 hover:text-romantic-600 transition flex items-center gap-1 disabled:opacity-50"
-            title="Make sweeter and more caring"
+            className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white hover:bg-[#ffe033] border-2 border-black text-black shadow-[0_2px_0_#000] active:translate-y-0.5 transition disabled:opacity-50"
           >
-            <span>🥰 Sweeter</span>
+            🥰 Sweeter
           </button>
 
           <button
+            type="button"
             onClick={() => handleTransform("more_natural", "Sound Like Me")}
             disabled={Boolean(transformingStyle)}
-            className="text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-pink-100/80 hover:bg-pink-100 border border-pink-200 text-romantic-700 transition flex items-center gap-1 disabled:opacity-50"
-            title="Adapt to strictly match your authentic profile"
+            className="text-[11px] font-extrabold px-2.5 py-1 rounded-lg bg-[#c084fc] hover:bg-[#d8b4fe] border-2 border-black text-black shadow-[0_2px_0_#000] active:translate-y-0.5 transition flex items-center gap-1 disabled:opacity-50"
           >
-            <Sparkles className="w-3 h-3 text-romantic-500" />
+            <Sparkles className="w-3 h-3 text-black" />
             <span>Sound Like Me</span>
           </button>
         </div>

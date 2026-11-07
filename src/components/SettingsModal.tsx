@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { CommunicationProfile, LearnedPreferencesState } from "@/lib/types";
 import { DEFAULT_COMMUNICATION_PROFILE } from "@/lib/constants";
+import { AvatarCustomizer } from "./PixelAvatar";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -208,6 +209,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
         {/* Content */}
         <form onSubmit={handleSave} className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1 text-xs">
+          {/* Jeoparty Pixel Character Studio */}
+          <div className="space-y-2">
+            <h3 className="font-black text-sm text-gray-900 flex items-center gap-1.5">
+              <span>🎨 Jeoparty Pixel Character Customizer</span>
+            </h3>
+            <AvatarCustomizer compact={true} />
+          </div>
+
           {/* Gemini AI Card */}
           <div className="p-4 rounded-2xl bg-white border border-pink-200 space-y-3">
             <div className="flex items-center justify-between">

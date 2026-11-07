@@ -193,7 +193,9 @@ export async function ensureSchema() {
       d1.prepare(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, thinking_mode TEXT, suggested_replies TEXT, attachments TEXT, suggested_memories TEXT, created_at TEXT NOT NULL, FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE);`),
       d1.prepare(`CREATE TABLE IF NOT EXISTS push_subscriptions (endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL);`),
       d1.prepare(`CREATE TABLE IF NOT EXISTS response_feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT, suggestion_text TEXT NOT NULL, rating TEXT NOT NULL, situation_context TEXT NOT NULL DEFAULT 'general', tone TEXT, style_tags TEXT, length_category TEXT, reasoning TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`),
-      d1.prepare(`CREATE INDEX IF NOT EXISTS idx_feedback_context_rating ON response_feedback(situation_context, rating);`)
+      d1.prepare(`CREATE INDEX IF NOT EXISTS idx_feedback_context_rating ON response_feedback(situation_context, rating);`),
+      d1.prepare(`CREATE TABLE IF NOT EXISTS virtual_date_rooms (code TEXT PRIMARY KEY, game_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'waiting', host_id TEXT NOT NULL, players_json TEXT NOT NULL, state_json TEXT NOT NULL, chat_json TEXT NOT NULL DEFAULT '[]', reactions_json TEXT NOT NULL DEFAULT '[]', winner TEXT, version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`),
+      d1.prepare(`CREATE TABLE IF NOT EXISTS game_history (id INTEGER PRIMARY KEY AUTOINCREMENT, room_code TEXT NOT NULL, game_type TEXT NOT NULL, game_title TEXT NOT NULL, players_json TEXT NOT NULL, winner TEXT NOT NULL, summary TEXT NOT NULL, played_at TEXT NOT NULL);`)
     ]);
   } else if (process.env.DATABASE_URL) {
     const pool = getPgPool();
@@ -371,6 +373,32 @@ export async function ensureSchema() {
         updated_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_feedback_context_rating ON response_feedback(situation_context, rating);
+
+      CREATE TABLE IF NOT EXISTS virtual_date_rooms (
+        code TEXT PRIMARY KEY,
+        game_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'waiting',
+        host_id TEXT NOT NULL,
+        players_json TEXT NOT NULL,
+        state_json TEXT NOT NULL,
+        chat_json TEXT NOT NULL DEFAULT '[]',
+        reactions_json TEXT NOT NULL DEFAULT '[]',
+        winner TEXT,
+        version INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS game_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        room_code TEXT NOT NULL,
+        game_type TEXT NOT NULL,
+        game_title TEXT NOT NULL,
+        players_json TEXT NOT NULL,
+        winner TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        played_at TEXT NOT NULL
+      );
     `);
   }
 
@@ -379,6 +407,39 @@ export async function ensureSchema() {
   try { await executeRun("ALTER TABLE memories ADD COLUMN status TEXT DEFAULT 'confirmed'"); } catch {}
   try { await executeRun("ALTER TABLE memories ADD COLUMN source_type TEXT DEFAULT 'her_statement'"); } catch {}
   try { await executeRun("ALTER TABLE memories ADD COLUMN related_keys TEXT"); } catch {}
+  try { await executeRun("ALTER TABLE conversations ADD COLUMN pinned INTEGER DEFAULT 0"); } catch {}
+  try { await executeRun("ALTER TABLE messages ADD COLUMN versions TEXT"); } catch {}
+
+  try {
+    await executeRun(`
+      CREATE TABLE IF NOT EXISTS virtual_date_rooms (
+        code TEXT PRIMARY KEY,
+        game_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'waiting',
+        host_id TEXT NOT NULL,
+        players_json TEXT NOT NULL,
+        state_json TEXT NOT NULL,
+        chat_json TEXT NOT NULL DEFAULT '[]',
+        reactions_json TEXT NOT NULL DEFAULT '[]',
+        winner TEXT,
+        version INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    await executeRun(`
+      CREATE TABLE IF NOT EXISTS game_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        room_code TEXT NOT NULL,
+        game_type TEXT NOT NULL,
+        game_title TEXT NOT NULL,
+        players_json TEXT NOT NULL,
+        winner TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        played_at TEXT NOT NULL
+      );
+    `);
+  } catch {}
 
   // Safe creation of response_feedback table
   try {
@@ -734,7 +795,8 @@ export async function getConversations(options: {
     SELECT 
       c.id, 
       c.title, 
-      c.archived, 
+      c.archived,
+      c.pinned,
       c.created_at, 
       c.updated_at,
       COUNT(m.id) as message_count,
@@ -763,12 +825,13 @@ export async function getConversations(options: {
     query += " WHERE " + conditions.join(" AND ");
   }
 
-  query += " GROUP BY c.id ORDER BY c.updated_at DESC";
+  query += " GROUP BY c.id ORDER BY COALESCE(c.pinned, 0) DESC, c.updated_at DESC";
   const rows = await queryRows(query, params);
 
   return rows.map((r) => ({
     ...r,
     archived: Boolean(r.archived),
+    pinned: Boolean(r.pinned),
     message_count: Number(r.message_count || 0),
   }));
 }
@@ -785,16 +848,25 @@ export async function getConversationMessages(conversationId: string): Promise<a
     suggested_replies: r.suggested_replies ? JSON.parse(r.suggested_replies) : undefined,
     attachments: r.attachments ? JSON.parse(r.attachments) : undefined,
     suggested_memories: r.suggested_memories ? JSON.parse(r.suggested_memories) : undefined,
+    versions: r.versions ? JSON.parse(r.versions) : undefined,
   }));
 }
 
 export async function createConversation(id: string, title: string): Promise<void> {
   const now = new Date().toISOString();
   await executeRun(`
-    INSERT INTO conversations (id, title, archived, created_at, updated_at)
-    VALUES (?, ?, 0, ?, ?)
+    INSERT INTO conversations (id, title, archived, pinned, created_at, updated_at)
+    VALUES (?, ?, 0, 0, ?, ?)
     ON CONFLICT(id) DO UPDATE SET title = EXCLUDED.title, updated_at = EXCLUDED.updated_at
   `, [id, title, now, now]);
+}
+
+export async function pinConversation(id: string, pinned: boolean): Promise<void> {
+  await executeRun(`
+    UPDATE conversations
+    SET pinned = ?
+    WHERE id = ?
+  `, [pinned ? 1 : 0, id]);
 }
 
 export async function renameConversation(id: string, newTitle: string): Promise<void> {
@@ -909,7 +981,50 @@ export async function editUserMessage(messageId: number, newContent: string): Pr
   await executeRun("UPDATE messages SET content = ? WHERE id = ?", [newContent, messageId]);
 }
 
+export async function updateMessageContentAndReplies(
+  messageId: number,
+  data: {
+    content?: string;
+    suggestedReplies?: any;
+    versions?: any;
+  }
+): Promise<void> {
+  const existing = await querySingle<any>("SELECT * FROM messages WHERE id = ?", [messageId]);
+  if (!existing) return;
+
+  const nextContent = data.content !== undefined ? data.content : existing.content;
+  const nextReplies =
+    data.suggestedReplies !== undefined
+      ? JSON.stringify(data.suggestedReplies)
+      : existing.suggested_replies;
+  const nextVersions =
+    data.versions !== undefined
+      ? JSON.stringify(data.versions)
+      : existing.versions || null;
+
+  await executeRun(
+    "UPDATE messages SET content = ?, suggested_replies = ?, versions = ? WHERE id = ?",
+    [nextContent, nextReplies, nextVersions, messageId]
+  );
+}
+
 export async function deleteMessage(messageId: number): Promise<void> {
+  try {
+    const row = await querySingle<{ attachments: string }>(
+      "SELECT attachments FROM messages WHERE id = ?",
+      [messageId]
+    );
+    if (row?.attachments) {
+      const list = JSON.parse(row.attachments);
+      if (Array.isArray(list)) {
+        for (const att of list) {
+          if (att.storageKey) {
+            await deleteMediaFromR2(att.storageKey);
+          }
+        }
+      }
+    }
+  } catch {}
   await executeRun("DELETE FROM messages WHERE id = ?", [messageId]);
 }
 
@@ -1225,4 +1340,118 @@ export async function getLearnedPreferences(): Promise<LearnedPreferencesState> 
     situations,
     recentFeedbacks: feedbacks.slice(0, 30),
   };
+}
+
+// ==========================================
+// VIRTUAL DATE MULTIPLAYER ROOMS & GAME HISTORY
+// ==========================================
+
+export async function saveVirtualDateRoom(room: {
+  code: string;
+  gameType: string;
+  status: "waiting" | "playing" | "finished";
+  hostId: string;
+  players: any[];
+  state: any;
+  chat: any[];
+  reactions: any[];
+  winner?: string | null;
+  version: number;
+}): Promise<void> {
+  const now = new Date().toISOString();
+  const code = room.code.toUpperCase();
+  await executeRun(
+    `INSERT INTO virtual_date_rooms (code, game_type, status, host_id, players_json, state_json, chat_json, reactions_json, winner, version, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(code) DO UPDATE SET
+       game_type = EXCLUDED.game_type,
+       status = EXCLUDED.status,
+       host_id = EXCLUDED.host_id,
+       players_json = EXCLUDED.players_json,
+       state_json = EXCLUDED.state_json,
+       chat_json = EXCLUDED.chat_json,
+       reactions_json = EXCLUDED.reactions_json,
+       winner = EXCLUDED.winner,
+       version = EXCLUDED.version,
+       updated_at = EXCLUDED.updated_at`,
+    [
+      code,
+      room.gameType,
+      room.status,
+      room.hostId,
+      JSON.stringify(room.players || []),
+      JSON.stringify(room.state || {}),
+      JSON.stringify((room.chat || []).slice(-60)),
+      JSON.stringify((room.reactions || []).slice(-25)),
+      room.winner || null,
+      room.version || 1,
+      now,
+      now,
+    ]
+  );
+}
+
+export async function getVirtualDateRoom(code: string): Promise<any | null> {
+  const cleanCode = code.trim().toUpperCase();
+  const row = await querySingle<any>(
+    "SELECT * FROM virtual_date_rooms WHERE code = ?",
+    [cleanCode]
+  );
+  if (!row) return null;
+
+  return {
+    code: row.code,
+    gameType: row.game_type,
+    status: row.status,
+    hostId: row.host_id,
+    players: row.players_json ? JSON.parse(row.players_json) : [],
+    state: row.state_json ? JSON.parse(row.state_json) : {},
+    chat: row.chat_json ? JSON.parse(row.chat_json) : [],
+    reactions: row.reactions_json ? JSON.parse(row.reactions_json) : [],
+    winner: row.winner || null,
+    version: Number(row.version || 1),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function recordGameHistory(data: {
+  room_code: string;
+  game_type: string;
+  game_title: string;
+  players: any[];
+  winner: string;
+  summary: string;
+}): Promise<void> {
+  const now = new Date().toISOString();
+  await executeRun(
+    `INSERT INTO game_history (room_code, game_type, game_title, players_json, winner, summary, played_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      data.room_code,
+      data.game_type,
+      data.game_title,
+      JSON.stringify(data.players || []),
+      data.winner,
+      data.summary,
+      now,
+    ]
+  );
+}
+
+export async function getGameHistory(limit = 30): Promise<any[]> {
+  const rows = await queryRows<any>(
+    "SELECT * FROM game_history ORDER BY id DESC LIMIT ?",
+    [limit]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    room_code: r.room_code,
+    game_type: r.game_type,
+    game_title: r.game_title,
+    players: r.players_json ? JSON.parse(r.players_json) : [],
+    winner: r.winner,
+    summary: r.summary,
+    played_at: r.played_at,
+  }));
 }

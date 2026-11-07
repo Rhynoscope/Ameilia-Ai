@@ -5,16 +5,14 @@ import {
   Calendar as CalendarIcon,
   Plus,
   Trash2,
-  Gift,
-  Heart,
-  Clock,
-  Sparkles,
-  AlertCircle,
+  Gamepad2,
   X,
 } from "lucide-react";
 import { DateCategory, ImportantDate } from "@/lib/types";
+import { VirtualDatesArena } from "@/components/VirtualDatesArena";
 
 export default function ImportantDatesPage() {
+  const [activeTab, setActiveTab] = useState<"arcade" | "milestones">("arcade");
   const [dates, setDates] = useState<ImportantDate[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -23,9 +21,18 @@ export default function ImportantDatesPage() {
   const [reminderDays, setReminderDays] = useState(7);
   const [notes, setNotes] = useState("");
   const [recurring, setRecurring] = useState(true);
+  const [roomCodeFromUrl, setRoomCodeFromUrl] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDates();
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      const rm = sp.get("room");
+      if (rm) {
+        setRoomCodeFromUrl(rm.toUpperCase());
+        setActiveTab("arcade");
+      }
+    }
   }, []);
 
   const fetchDates = async () => {
@@ -69,7 +76,6 @@ export default function ImportantDatesPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to remove this date?")) return;
     try {
       await fetch(`/api/dates?id=${id}`, { method: "DELETE" });
       setDates((prev) => prev.filter((d) => d.id !== id));
@@ -97,126 +103,147 @@ export default function ImportantDatesPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-8 animate-fade-in pb-16">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-pink-100 text-romantic-600 text-xs font-semibold">
-            <CalendarIcon className="w-3.5 h-3.5 text-romantic-500" />
-            Special Occasions & Milestones
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-            Important Dates with Amelia
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6 pb-16">
+      {/* Top Mode Switcher */}
+      <div className="bg-[#261c7a] text-white border-[3.5px] border-black rounded-3xl p-4 shadow-[0_6px_0_#000] flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-black tracking-wide drop-shadow-[0_2px_0_#000]">
+            🎮 Virtual Dates Arcade & Relationship Milestones
           </h1>
-          <p className="text-sm text-gray-600">
-            Never forget birthdays, anniversaries, special dates, or future trips. Get proactive reminders so you can prepare early.
+          <p className="text-xs text-white/85 font-bold">
+            Play live multiplayer board & party games together, or track your upcoming visits & anniversaries!
           </p>
         </div>
 
-        <button
-          onClick={() => setModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-romantic-500 to-rose-400 hover:from-romantic-600 hover:to-rose-500 text-white font-semibold text-xs shadow-md shadow-pink-200 transition shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          Add Important Date
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab("arcade")}
+            className={`px-4 py-2 rounded-xl font-black text-xs border-2 border-black transition-all flex items-center gap-1.5 ${
+              activeTab === "arcade"
+                ? "bg-[#38e54d] text-[#05290a] shadow-[0_3px_0_#000]"
+                : "bg-[#fffdf7] text-black hover:bg-[#ffe033]"
+            }`}
+          >
+            <Gamepad2 className="w-4 h-4" />
+            <span>Multiplayer Games</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("milestones")}
+            className={`px-4 py-2 rounded-xl font-black text-xs border-2 border-black transition-all flex items-center gap-1.5 ${
+              activeTab === "milestones"
+                ? "bg-[#ffe033] text-black shadow-[0_3px_0_#000]"
+                : "bg-[#fffdf7] text-black hover:bg-[#ffe033]"
+            }`}
+          >
+            <CalendarIcon className="w-4 h-4" />
+            <span>Important Dates ({dates.length})</span>
+          </button>
+        </div>
       </div>
 
-      {/* Dates Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {dates.map((date) => {
-          const daysLeft = calculateDaysUntil(date.event_date);
-          const isSoon = daysLeft <= 14;
-
-          return (
-            <div
-              key={date.id}
-              className={`relative bg-white border rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-3 ${
-                daysLeft === 0
-                  ? "border-rose-400 ring-2 ring-rose-300"
-                  : isSoon
-                  ? "border-pink-300"
-                  : "border-pink-100"
-              }`}
+      {activeTab === "arcade" ? (
+        <VirtualDatesArena initialRoomCode={roomCodeFromUrl} />
+      ) : (
+        <div className="space-y-6">
+          <div className="flex justify-end">
+            <button
+              onClick={() => setModalOpen(true)}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl bg-[#38e54d] hover:bg-[#4df060] text-black font-black text-xs border-[2.5px] border-black shadow-[0_4px_0_#000]"
             >
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-pink-50 text-romantic-600 border border-pink-100">
-                    {date.category}
-                  </span>
+              <Plus className="w-4 h-4" />
+              Add Important Date
+            </button>
+          </div>
 
-                  <button
-                    onClick={() => handleDelete(date.id)}
-                    className="p-1 rounded-lg text-gray-400 hover:text-rose-500 hover:bg-rose-50"
-                    title="Delete date"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <h3 className="font-bold text-base text-gray-900">
-                  {date.title}
-                </h3>
-
-                <div className="flex items-center gap-1.5 text-xs text-gray-600">
-                  <CalendarIcon className="w-3.5 h-3.5 text-romantic-500" />
-                  <span>
-                    {new Date(date.event_date + "T00:00:00").toLocaleDateString(undefined, {
-                      month: "long",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </span>
-                </div>
-
-                {date.notes && (
-                  <p className="text-xs text-gray-700 italic pt-1">
-                    "{date.notes}"
-                  </p>
-                )}
-              </div>
-
-              {/* Countdown Pill */}
-              <div className="pt-3 border-t border-pink-50 flex items-center justify-between">
-                <span className="text-[11px] text-gray-500">
-                  Reminder: {date.reminder_days_before}d prior
-                </span>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    daysLeft === 0
-                      ? "bg-rose-500 text-white animate-pulse"
-                      : daysLeft <= 7
-                      ? "bg-romantic-500 text-white"
-                      : "bg-pink-100 text-romantic-700"
-                  }`}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {dates.map((date) => {
+              const daysLeft = calculateDaysUntil(date.event_date);
+              return (
+                <div
+                  key={date.id}
+                  className="bg-[#fffdf7] text-[#1a1a2e] border-[3px] border-black rounded-2xl p-5 shadow-[0_5px_0_#000] flex flex-col justify-between space-y-3"
                 >
-                  {daysLeft === 0 ? "🎉 Today!" : `${daysLeft} Days Away`}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-black tracking-wider px-2.5 py-0.5 rounded-full bg-[#ffe033] text-black border-2 border-black">
+                        {date.category}
+                      </span>
+
+                      <button
+                        onClick={() => handleDelete(date.id)}
+                        className="p-1.5 rounded-lg bg-[#ff5252] text-white border border-black"
+                        title="Delete date"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <h3 className="font-black text-base text-[#1a1a2e]">
+                      {date.title}
+                    </h3>
+
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
+                      <CalendarIcon className="w-3.5 h-3.5 text-[#3529a8]" />
+                      <span>
+                        {new Date(
+                          date.event_date + "T00:00:00"
+                        ).toLocaleDateString(undefined, {
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </div>
+
+                    {date.notes && (
+                      <p className="text-xs text-gray-700 font-medium italic pt-1">
+                        &ldquo;{date.notes}&rdquo;
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="pt-3 border-t-2 border-dashed border-black/20 flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-gray-600">
+                      Reminder: {date.reminder_days_before}d prior
+                    </span>
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-black border-2 border-black ${
+                        daysLeft === 0
+                          ? "bg-[#38e54d] text-black"
+                          : "bg-[#ff6bd6] text-black"
+                      }`}
+                    >
+                      {daysLeft === 0 ? "🎉 Today!" : `${daysLeft} Days Away`}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Add Date Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-pink-200 rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90dvh] overflow-y-auto pb-[env(safe-area-inset-bottom)]">
-            <div className="flex items-center justify-between pb-2 border-b border-pink-100">
-              <h3 className="font-bold text-sm sm:text-base text-gray-900">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-xs">
+          <div className="bg-[#fffdf7] text-[#1a1a2e] border-[3.5px] border-black rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-5 shadow-[0_8px_0_#000] space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b-2 border-black">
+              <h3 className="font-black text-base">
                 Add Important Relationship Date
               </h3>
               <button
                 onClick={() => setModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
-                aria-label="Close modal"
+                className="w-8 h-8 rounded-xl bg-[#ff5252] text-white font-black border-2 border-black flex items-center justify-center"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleAddDate} className="space-y-4">
+            <form onSubmit={handleAddDate} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                <label className="block text-xs font-black mb-1">
                   Occasion Title
                 </label>
                 <input
@@ -224,35 +251,33 @@ export default function ImportantDatesPage() {
                   required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Amelia's Birthday, Anniversary, Trip to Cabin"
-                  className="w-full text-xs px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-romantic-400"
+                  placeholder="e.g. Amelia's Birthday, Anniversary, Next Visit"
+                  className="w-full text-xs font-bold px-3 py-2 rounded-xl bg-white border-2 border-black"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Date
-                  </label>
+                  <label className="block text-xs font-black mb-1">Date</label>
                   <input
                     type="date"
                     required
                     value={eventDate}
                     onChange={(e) => setEventDate(e.target.value)}
-                    className="w-full text-xs px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-romantic-400"
+                    className="w-full text-xs font-bold px-3 py-2 rounded-xl bg-white border-2 border-black"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  <label className="block text-xs font-black mb-1">
                     Category
                   </label>
                   <select
                     value={category}
                     onChange={(e: any) => setCategory(e.target.value)}
-                    className="w-full text-xs px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-romantic-400"
+                    className="w-full text-xs font-bold px-3 py-2 rounded-xl bg-white border-2 border-black"
                   >
-                    <option value="next_visit">✈️ Next Trip / Visit to See Her</option>
+                    <option value="next_visit">✈️ Next Trip / Visit</option>
                     <option value="birthday">🎂 Birthday</option>
                     <option value="anniversary">💍 Anniversary</option>
                     <option value="special_occasion">🎉 Special Occasion</option>
@@ -263,59 +288,28 @@ export default function ImportantDatesPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Notify Me In Advance:
-                </label>
-                <select
-                  value={reminderDays}
-                  onChange={(e) => setReminderDays(Number(e.target.value))}
-                  className="w-full text-xs px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-romantic-400"
-                >
-                  <option value={14}>14 Days Before</option>
-                  <option value={7}>7 Days Before (Recommended)</option>
-                  <option value={3}>3 Days Before</option>
-                  <option value={1}>1 Day Before</option>
-                  <option value={0}>On The Day</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                <label className="block text-xs font-black mb-1">
                   Notes & Gift Ideas (Optional)
                 </label>
                 <textarea
                   rows={2}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="e.g. Remember to book dinner at the Italian place, she wants the film camera..."
-                  className="w-full text-xs px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-romantic-400"
+                  className="w-full text-xs font-bold px-3 py-2 rounded-xl bg-white border-2 border-black"
                 />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="recurring"
-                  checked={recurring}
-                  onChange={(e) => setRecurring(e.target.checked)}
-                  className="rounded text-romantic-500 focus:ring-romantic-500/50"
-                />
-                <label htmlFor="recurring" className="text-xs text-gray-700">
-                  Repeat every year
-                </label>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-medium text-gray-500 hover:text-gray-700"
+                  className="px-4 py-2 rounded-xl text-xs font-black bg-gray-200 border-2 border-black"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-romantic-500 to-rose-400 shadow-md shadow-pink-200"
+                  className="px-5 py-2 rounded-xl text-xs font-black bg-[#38e54d] text-black border-2 border-black shadow-[0_3px_0_#000]"
                 >
                   Save Date
                 </button>

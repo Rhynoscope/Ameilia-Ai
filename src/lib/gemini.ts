@@ -792,17 +792,32 @@ In a long-distance relationship, staying connected is all about keeping communic
   };
 }
 
+export interface ImproveMessageOptions {
+  previousVersions?: string[];
+  conversationContext?: string;
+  dislikedTraits?: string[];
+  situationContext?: string;
+}
+
 /**
  * Message improvement / transformation helper
- * Supports: shorter, longer, funnier, sweeter, more_affectionate, more_romantic, more_flirty, regenerate, sound like me
+ * Supports: shorter, longer, funnier, sweeter, more_affectionate, more_romantic, more_flirty, regenerate, dislike_replace, sound like me
  */
 export async function improveMessage(
   originalMessage: string,
   styleId: string,
-  stylePrompt?: string
-): Promise<ImprovementResult> {
+  stylePrompt?: string,
+  options: ImproveMessageOptions = {}
+): Promise<ImprovementResult & { tone?: string }> {
   const client = getGeminiClient();
   const model = getGeminiModel();
+  const previousVersions = Array.from(
+    new Set(
+      [originalMessage, ...(options.previousVersions || [])]
+        .map((v) => (v || "").trim())
+        .filter(Boolean)
+    )
+  );
 
   let specificGuidance = stylePrompt || "";
   if (styleId === "shorter") {
@@ -819,19 +834,35 @@ export async function improveMessage(
     specificGuidance = "Make this feel more romantically special and tender, creating that flutter feeling naturally.";
   } else if (styleId === "more_flirty") {
     specificGuidance = "Add playful flirty banter, charm, and teasing chemistry.";
-  } else if (styleId === "regenerate") {
-    specificGuidance = "Generate a completely fresh, alternative way to say this with the same sentiment and authentic casual tone.";
+  } else if (styleId === "regenerate" || styleId === "dislike_replace") {
+    specificGuidance =
+      stylePrompt ||
+      "Generate a completely fresh, alternative message with a distinctly different wording, opening, angle, and rhythm while keeping the core relationship intent authentic.";
   } else if (styleId === "more_natural" || styleId === "like_me") {
     specificGuidance = "Adapt this text to strictly match my authentic personal voice, casual phrasing, and sample messages from my profile.";
   }
 
+  const fallbackVariation = (base: string, idx: number): string => {
+    const clean = base.replace(/^["']|["']$/g, "").trim();
+    const variations = [
+      `Hey love, ${clean.charAt(0).toLowerCase() + clean.slice(1)}`,
+      `Honestly just thinking about you right now — ${clean.charAt(0).toLowerCase() + clean.slice(1)}`,
+      `${clean} (also hope your day is going super smoothly over there ❤️)`,
+      `Random thought: ${clean.charAt(0).toLowerCase() + clean.slice(1)}`,
+      `Missing you today! ${clean}`,
+    ];
+    for (const cand of variations) {
+      if (!previousVersions.includes(cand)) return cand;
+    }
+    return `${clean} — thinking of you! (#${idx + 1})`;
+  };
+
   if (!client) {
-    // Offline smart transformations
     let improved = originalMessage;
     if (styleId === "shorter") {
-      improved = originalMessage.length > 50 ? originalMessage.slice(0, 45) + "..." : originalMessage;
+      improved = originalMessage.length > 50 ? originalMessage.slice(0, 45) + "..." : `Hey, ${originalMessage.slice(0, 30)}`;
     } else if (styleId === "longer") {
-      improved = `${originalMessage}. Hope you're having the best day over there amel, missing you!`;
+      improved = `${originalMessage}. Hope you're having the best day over there Amelia, missing you lots!`;
     } else if (styleId === "funnier") {
       improved = `${originalMessage} (and no, you're not allowed to make fun of me for saying that haha)`;
     } else if (styleId === "sweeter") {
@@ -842,28 +873,64 @@ export async function improveMessage(
       improved = `Honestly so lucky to have you in my life. ${originalMessage}`;
     } else if (styleId === "more_flirty") {
       improved = `${originalMessage} 😉 unless you have other plans?`;
-    } else if (styleId === "regenerate") {
-      improved = `Hey! Just wanted to say: ${originalMessage.toLowerCase()}`;
+    } else {
+      improved = fallbackVariation(originalMessage, previousVersions.length);
+    }
+
+    if (previousVersions.includes(improved.trim())) {
+      improved = fallbackVariation(originalMessage, previousVersions.length + 1);
     }
 
     return {
       original: originalMessage,
       style: styleId,
       improved,
+      tone: styleId === "dislike_replace" ? "Fresh Alternative" : "Refined & Natural",
       reasoning: `[Demo Mode] Transformed message to '${styleId}' style.`,
       isDemoMode: true,
     };
   }
 
-  const prompt = `Rewrite this draft text to my long-distance girlfriend Amelia:
-Original draft: "${originalMessage}"
-Desired transformation: ${styleId} (${specificGuidance})
+  let learnedSummary = "";
+  try {
+    const learned = await getLearnedPreferences();
+    if (learned.preferredTones.length > 0 || learned.avoidedTones.length > 0) {
+      learnedSummary = `\nUser's Learned Preferences:
+- Preferred Tones: ${learned.preferredTones.slice(0, 4).join(", ") || "Warm, Natural, Genuine"}
+- Avoided Tones: ${learned.avoidedTones.slice(0, 4).join(", ") || "None"}
+- Preferred Length: ${learned.preferredLength}`;
+    }
+  } catch {}
 
-Rules:
-- Must sound like a genuine phone text sent by a boyfriend.
-- No cheesy clichés or formal robot speak.
-- Provide JSON output strictly in this format:
-{"improved": "exact text message to send", "reasoning": "1 sentence why this works"}`;
+  const avoidListBlock =
+    previousVersions.length > 0
+      ? `\nPREVIOUSLY GENERATED VERSIONS (DO NOT REPEAT OR CLOSELY PARAPHRASE ANY OF THESE):\n${previousVersions
+          .map((v, i) => `${i + 1}. "${v}"`)
+          .join("\n")}`
+      : "";
+
+  const contextBlock = options.conversationContext
+    ? `\nCONVERSATION / SITUATION CONTEXT:\n${options.conversationContext}`
+    : "";
+
+  const dislikedBlock =
+    options.dislikedTraits && options.dislikedTraits.length > 0
+      ? `\nTRAITS THE USER DISLIKED ABOUT THE PREVIOUS MESSAGE (STRICTLY AVOID THESE):\n- ${options.dislikedTraits.join("\n- ")}`
+      : "";
+
+  const prompt = `You are rewriting or regenerating a text message from a boyfriend to his long-distance girlfriend Amelia.
+
+Original / Previous message: "${originalMessage}"
+Requested action: ${styleId}
+Specific direction: ${specificGuidance}${contextBlock}${learnedSummary}${dislikedBlock}${avoidListBlock}
+
+CRITICAL RULES:
+1. You MUST write a genuinely NEW, fresh version that is noticeably different in opening words, phrasing, and structure from every message in PREVIOUSLY GENERATED VERSIONS.
+2. NEVER return the exact same text as "${originalMessage}".
+3. NEVER use the 👍 (thumbs-up) emoji anywhere in the message.
+4. Keep it sounding like a real, natural text message from a loving boyfriend (not stiff or robotic).
+5. Return ONLY valid JSON in this exact format (no markdown code fences, no extra commentary):
+{"improved": "the new text message to send", "tone": "2-3 word tone label", "reasoning": "1 short sentence explaining why this new version works better"}`;
 
   try {
     const res = await client.interactions.create({
@@ -871,22 +938,96 @@ Rules:
       input: prompt,
       system_instruction: await buildCoachSystemInstruction(),
     });
-    const parsed = JSON.parse(
-      (res.output_text || "{}").replace(/```json/g, "").replace(/```/g, "").trim()
-    );
+
+    const rawText = (res.output_text || "").trim();
+    let improvedText = "";
+    let toneLabel = "Fresh & Natural";
+    let reasoningText = "Generated a fresh variation tailored to your preferences.";
+
+    // Robust JSON extraction even if Gemini wraps it in prose or codeblocks
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.improved && typeof parsed.improved === "string") {
+          improvedText = parsed.improved.trim();
+        }
+        if (parsed.tone && typeof parsed.tone === "string") {
+          toneLabel = parsed.tone.trim();
+        }
+        if (parsed.reasoning && typeof parsed.reasoning === "string") {
+          reasoningText = parsed.reasoning.trim();
+        }
+      } catch {
+        // Fallback regex extraction if unescaped quotes exist inside JSON
+        const impMatch = rawText.match(/"improved"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+        if (impMatch?.[1]) {
+          improvedText = impMatch[1].replace(/\\"/g, '"').replace(/\\n/g, "\n").trim();
+        }
+      }
+    }
+
+    if (!improvedText && rawText.length > 0 && !rawText.startsWith("{")) {
+      improvedText = rawText
+        .replace(/```json/gi, "")
+        .replace(/```/g, "")
+        .replace(/^["']|["']$/g, "")
+        .trim();
+    }
+
+    // Never allow👍 in suggested text to Amelia
+    improvedText = improvedText.replace(/👍/g, "").trim();
+
+    // Check if improvedText is empty or identical to any previous version
+    const isDuplicate =
+      !improvedText ||
+      previousVersions.some(
+        (prev) => prev.toLowerCase().trim() === improvedText.toLowerCase().trim()
+      );
+
+    if (isDuplicate) {
+      // Perform a fast second-pass plain-text variation call so it is guaranteed fresh
+      try {
+        const retryRes = await client.interactions.create({
+          model,
+          input: `Give me ONE completely different, natural text message for my girlfriend Amelia that expresses the same core thought as "${originalMessage}", but uses totally different wording and opening words than: ${previousVersions.map((v) => `"${v}"`).join(", ")}. Output ONLY the raw message text itself with no quotes or JSON.`,
+          system_instruction: await buildCoachSystemInstruction(),
+        });
+        const retryClean = (retryRes.output_text || "")
+          .replace(/^["']|["']$/g, "")
+          .replace(/👍/g, "")
+          .trim();
+        if (
+          retryClean &&
+          !previousVersions.some(
+            (prev) => prev.toLowerCase().trim() === retryClean.toLowerCase().trim()
+          )
+        ) {
+          improvedText = retryClean;
+        } else {
+          improvedText = fallbackVariation(originalMessage, previousVersions.length);
+        }
+      } catch {
+        improvedText = fallbackVariation(originalMessage, previousVersions.length);
+      }
+    }
+
     return {
       original: originalMessage,
       style: styleId,
-      improved: parsed.improved || originalMessage,
-      reasoning: parsed.reasoning || "Enhanced naturally.",
+      improved: improvedText,
+      tone: toneLabel,
+      reasoning: reasoningText,
       isDemoMode: false,
     };
   } catch (err: any) {
+    const fallback = fallbackVariation(originalMessage, previousVersions.length);
     return {
       original: originalMessage,
       style: styleId,
-      improved: originalMessage,
-      reasoning: err.message,
+      improved: fallback,
+      tone: "Alternative Angle",
+      reasoning: "Created a fresh phrasing variation.",
       isDemoMode: false,
     };
   }

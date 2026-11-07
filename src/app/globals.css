@@ -1,19 +1,28 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Patrick+Hand&family=Silkscreen:wght@400;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 255 255 255;
-    --foreground: 17 24 39; /* #111827 Dark charcoal / black */
+    --background: 53 41 168;
+    --foreground: 17 24 39;
+    --skribbl-bg: #3529a8;
+    --skribbl-panel: #261c7a;
+    --cream-paper: #fffdf7;
   }
 
   html,
   body {
     color: #111827;
-    background-color: #ffffff;
+    background-color: #3529a8;
+    background-image: url('/assets/doodle-bg.png');
+    background-repeat: repeat;
+    background-size: 180px 180px;
+    image-rendering: auto;
+    font-family: 'Fredoka', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     min-height: 100dvh;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     overflow-x: hidden;
     -webkit-tap-highlight-color: transparent;
   }
@@ -39,10 +48,54 @@
   }
 }
 
-/* Custom scrollbars with gentle pink accents */
+/* Jeoparty / Skribbl Pixel Sprite Animations */
+@keyframes pixelSprite3 {
+  from { background-position: 0% 0; }
+  to { background-position: 100% 0; }
+}
+
+@keyframes pixelAvatar4 {
+  from { background-position: 0% 0; }
+  to { background-position: 100% 0; }
+}
+
+.pixel-logo-anim {
+  background-image: url('/assets/amelia-logo-sheet.png');
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  animation: pixelSprite3 0.9s steps(2) infinite alternate;
+}
+
+.pixel-avatar-anim {
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  animation: pixelAvatar4 0.85s steps(3) infinite alternate;
+}
+
+/* Hand-drawn MS Paint Card & Button Utilities */
+.ms-paint-card {
+  background-color: #fffdf7;
+  border: 3px solid #000000;
+  box-shadow: 0 5px 0 #000000;
+}
+
+.btn-skribbl {
+  border: 2.5px solid #000000;
+  box-shadow: 0 3px 0 #000000;
+  font-weight: 800;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.btn-skribbl:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #000000;
+}
+
+/* Custom scrollbars */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -50,17 +103,17 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(244, 63, 122, 0.2);
+  background: rgba(0, 0, 0, 0.35);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(244, 63, 122, 0.4);
+  background: rgba(0, 0, 0, 0.55);
 }
 
 ::selection {
-  background-color: rgba(254, 205, 219, 0.7);
-  color: #111827;
+  background-color: #ffe033;
+  color: #000000;
 }
 
 /* Hide scrollbar utility */

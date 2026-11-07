@@ -33,6 +33,9 @@ import {
   Camera,
   Mic,
   Image as ImageIcon,
+  Pin,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import {
   ChatAttachment,
@@ -46,6 +49,12 @@ import { processUploadedFile } from "@/lib/media-handler";
 import { MediaPreview } from "@/components/MediaPreview";
 import { ReplyCard } from "@/components/ReplyCard";
 import { VirtualDatesModal } from "@/components/VirtualDatesModal";
+import { PixelAvatar } from "@/components/PixelAvatar";
+import {
+  AvatarConfig,
+  loadHerAvatar,
+  loadMyAvatar,
+} from "@/lib/pixel-avatar";
 
 const LDR_QUICK_SUGGESTIONS = [
   {
@@ -184,9 +193,16 @@ export default function AmeliaAICentralChat() {
   const [convoToRename, setConvoToRename] = useState<ConversationSummary | null>(null);
   const [renameInputValue, setRenameInputValue] = useState("");
 
-  // Inline Message Editing
+  // Inline Message Editing & Deletion
   const [editingMsgId, setEditingMsgId] = useState<number | null>(null);
   const [editingMsgText, setEditingMsgText] = useState("");
+  const [deletingMsgId, setDeletingMsgId] = useState<number | null>(null);
+  const [regeneratingMsgId, setRegeneratingMsgId] = useState<number | null>(null);
+  const [roomCodeFromUrl, setRoomCodeFromUrl] = useState<string | null>(null);
+
+  // Jeoparty Pixel Avatars
+  const [myAvatar, setMyAvatar] = useState<AvatarConfig>(() => loadMyAvatar());
+  const [herAvatar, setHerAvatar] = useState<AvatarConfig>(() => loadHerAvatar());
 
   // Mobile & Attachment State
   const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
@@ -209,11 +225,26 @@ export default function AmeliaAICentralChat() {
     }
   }, []);
 
-  // Initialize sidebar state based on screen size (closed on mobile)
+  // Initialize sidebar state based on screen size (closed on mobile) + URL room detection + Avatar sync
   useEffect(() => {
-    if (typeof window !== "undefined" && window.innerWidth < 768) {
-      setSidebarOpen(false);
+    if (typeof window !== "undefined") {
+      if (window.innerWidth < 768) {
+        setSidebarOpen(false);
+      }
+      const sp = new URLSearchParams(window.location.search);
+      const rm = sp.get("room");
+      if (rm) {
+        setRoomCodeFromUrl(rm.toUpperCase());
+        setVirtualDatesModalOpen(true);
+      }
     }
+    const onAvatarChanged = () => {
+      setMyAvatar(loadMyAvatar());
+      setHerAvatar(loadHerAvatar());
+    };
+    window.addEventListener("amelia-avatar-changed", onAvatarChanged);
+    return () =>
+      window.removeEventListener("amelia-avatar-changed", onAvatarChanged);
   }, []);
 
   // Listen for prompt insertion from Starters or Polish Message modals
@@ -348,6 +379,21 @@ How can I help you and Amelia today?`,
         prev.map((c) => (c.id === convoToRename.id ? { ...c, title: renameInputValue.trim() } : c))
       );
       setConvoToRename(null);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleTogglePin = async (c: ConversationSummary) => {
+    setOpenMenuConvoId(null);
+    try {
+      const nextPinned = !c.pinned;
+      await fetch(`/api/chat/${c.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinned: nextPinned }),
+      });
+      loadConversations(activeConvoId);
     } catch (e) {
       console.error(e);
     }
@@ -496,18 +542,8 @@ How can I help you and Amelia today?`,
         throw new Error(data.error || "Failed to communicate with Amelia AI");
       }
 
-      const assistantMsg: ChatMessage = {
-        id: Date.now() + 1,
-        conversation_id: activeConvoId,
-        role: "assistant",
-        content: data.reply,
-        thinking_mode: thinkingMode,
-        suggested_replies: data.suggestedReplies,
-        suggested_memories: data.suggestedMemories,
-        created_at: new Date().toISOString(),
-      };
-
-      setMessages((prev) => [...prev, assistantMsg]);
+      // Reload saved messages from DB so real database IDs are populated for delete/regenerate
+      await loadMessages(activeConvoId);
       loadConversations(activeConvoId);
     } catch (err: any) {
       const errMsg = err?.message || String(err);
@@ -536,11 +572,110 @@ How can I help you and Amelia today?`,
     }
   };
 
+  const handleRegenerateMessage = async (
+    targetMsg?: ChatMessage,
+    dislikedReason?: string
+  ) => {
+    if (loading || regeneratingMsgId !== null) return;
+    const msgToRegen =
+      targetMsg ||
+      [...messages].reverse().find((m) => m.role === "assistant" && m.id > 0);
+
+    if (!msgToRegen) return;
+    setRegeneratingMsgId(msgToRegen.id);
+
+    try {
+      const existingVersions = Array.isArray(msgToRegen.versions)
+        ? msgToRegen.versions.map((v) => v.content)
+        : [msgToRegen.content];
+
+      const res = await fetch(`/api/chat/${activeConvoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "regenerate_assistant",
+          messageId: msgToRegen.id,
+          previousVersions: existingVersions,
+          dislikedReason,
+          thinkingMode,
+        }),
+      });
+
+      const data: any = await res.json();
+      if (res.ok && data.reply) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === msgToRegen.id
+              ? {
+                  ...m,
+                  content: data.reply,
+                  suggested_replies: data.suggestedReplies,
+                  suggested_memories: data.suggestedMemories,
+                  versions: data.versions,
+                  activeVersionIndex: (data.versions?.length || 1) - 1,
+                  rating: null,
+                }
+              : m
+          )
+        );
+      }
+    } catch (e) {
+      console.error("Failed to regenerate assistant message:", e);
+    } finally {
+      setRegeneratingMsgId(null);
+    }
+  };
+
   const handleRegenerate = async () => {
-    if (messages.length <= 1 || loading) return;
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-    if (!lastUserMsg) return;
-    handleSend(lastUserMsg.content);
+    await handleRegenerateMessage();
+  };
+
+  const handleMessageFeedback = async (
+    msg: ChatMessage,
+    newRating: "like" | "dislike"
+  ) => {
+    if (regeneratingMsgId === msg.id) return;
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msg.id ? { ...m, rating: newRating } : m))
+    );
+
+    try {
+      await fetch("/api/preferences/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationId: activeConvoId,
+          suggestionText:
+            msg.suggested_replies?.[0]?.message || msg.content.slice(0, 300),
+          rating: newRating,
+          situationContext: msg.suggested_replies?.[0]?.situation || "general",
+          tone: msg.suggested_replies?.[0]?.tone || "Assistant Advice",
+        }),
+      });
+
+      if (newRating === "dislike") {
+        await handleRegenerateMessage(
+          msg,
+          `User disliked previous phrasing/tone: "${msg.content.slice(0, 120)}"`
+        );
+      }
+    } catch (e) {
+      console.error("Feedback error:", e);
+    }
+  };
+
+  const handleConfirmDeleteSingleMessage = async (msgId: number) => {
+    try {
+      setDeletingMsgId(null);
+      setMessages((prev) => prev.filter((m) => m.id !== msgId));
+      if (msgId > 0 && activeConvoId) {
+        await fetch(`/api/chat/${activeConvoId}?messageId=${msgId}`, {
+          method: "DELETE",
+        });
+      }
+    } catch (e) {
+      console.error("Delete message error:", e);
+    }
   };
 
   // Message inline editing
@@ -549,15 +684,25 @@ How can I help you and Amelia today?`,
     setEditingMsgText(msg.content);
   };
 
-  const handleSaveEdit = (msg: ChatMessage) => {
+  const handleSaveEdit = async (msg: ChatMessage) => {
     if (!editingMsgText.trim() || loading) return;
     const editedText = editingMsgText.trim();
     setEditingMsgId(null);
 
-    // Rollback conversation state to this message and re-send
+    // Delete this message and any messages after it in DB so edit + re-send is clean
     const idx = messages.findIndex((m) => m.id === msg.id);
     if (idx !== -1) {
+      const toRemove = messages.slice(idx);
       setMessages(messages.slice(0, idx));
+      for (const rm of toRemove) {
+        if (rm.id > 0 && activeConvoId) {
+          try {
+            await fetch(`/api/chat/${activeConvoId}?messageId=${rm.id}`, {
+              method: "DELETE",
+            });
+          } catch {}
+        }
+      }
     }
     handleSend(editedText);
   };
@@ -767,11 +912,15 @@ How can I help you and Amelia today?`,
                 >
                   <div className="flex items-center justify-between gap-1.5">
                     <div className="flex items-center gap-2 truncate">
-                      <MessageSquare
-                        className={`w-3.5 h-3.5 shrink-0 ${
-                          isActive ? "text-romantic-600" : "text-gray-400"
-                        }`}
-                      />
+                      {c.pinned ? (
+                        <Pin className="w-3.5 h-3.5 shrink-0 text-[#eab308] fill-[#eab308]" />
+                      ) : (
+                        <MessageSquare
+                          className={`w-3.5 h-3.5 shrink-0 ${
+                            isActive ? "text-romantic-600" : "text-gray-400"
+                          }`}
+                        />
+                      )}
                       <span className="font-bold truncate text-[12.5px] text-gray-900">
                         {c.title || "New Conversation"}
                       </span>
@@ -784,7 +933,7 @@ How can I help you and Amelia today?`,
                         e.stopPropagation();
                         setOpenMenuConvoId(isMenuOpen ? null : c.id);
                       }}
-                      className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-pink-100/60 transition opacity-80 group-hover:opacity-100"
+                      className="p-1 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-pink-100/60 transition"
                       title="Conversation options"
                     >
                       <MoreVertical className="w-3.5 h-3.5" />
@@ -806,11 +955,19 @@ How can I help you and Amelia today?`,
                     <div
                       ref={menuRef}
                       onClick={(e) => e.stopPropagation()}
-                      className="absolute right-2 top-8 z-50 w-44 bg-white rounded-2xl shadow-xl border border-pink-200 py-1.5 animate-in fade-in zoom-in-95 text-xs text-gray-700"
+                      className="absolute right-2 top-8 z-50 w-44 bg-white rounded-2xl shadow-xl border-2 border-black py-1.5 animate-in fade-in zoom-in-95 text-xs text-gray-800"
                     >
                       <button
+                        onClick={() => handleTogglePin(c)}
+                        className="w-full px-3 py-2 text-left hover:bg-[#ffe033] flex items-center gap-2 transition font-bold"
+                      >
+                        <Pin className="w-3.5 h-3.5 text-[#eab308]" />
+                        <span>{c.pinned ? "Unpin Chat" : "Pin to Top"}</span>
+                      </button>
+
+                      <button
                         onClick={() => handleOpenRename(c)}
-                        className="w-full px-3 py-2 text-left hover:bg-pink-50 flex items-center gap-2 transition text-gray-800"
+                        className="w-full px-3 py-2 text-left hover:bg-[#ffe033] flex items-center gap-2 transition font-bold"
                       >
                         <Edit2 className="w-3.5 h-3.5 text-romantic-500" />
                         <span>Rename</span>
@@ -1022,29 +1179,59 @@ How can I help you and Amelia today?`,
         </div>
 
         {/* Message Stream Area */}
-        <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-6">
+        <div className="flex-1 overflow-y-auto px-3 sm:px-8 py-5 space-y-6 bg-[#fffdf7]">
           {messages.map((msg, index) => {
             const isUser = msg.role === "user";
             const isEditing = editingMsgId === msg.id;
+            const isConfirmingDelete = deletingMsgId === msg.id;
+            const isRegeneratingThis = regeneratingMsgId === msg.id;
+
+            const msgVersions =
+              Array.isArray(msg.versions) && msg.versions.length > 0
+                ? msg.versions
+                : null;
+            const activeVerIdx =
+              msg.activeVersionIndex !== undefined
+                ? msg.activeVersionIndex
+                : msgVersions
+                ? msgVersions.length - 1
+                : 0;
+            const displayedContent =
+              msgVersions && msgVersions[activeVerIdx]
+                ? msgVersions[activeVerIdx].content
+                : msg.content;
+            const displayedReplies =
+              msgVersions && msgVersions[activeVerIdx]?.suggested_replies
+                ? msgVersions[activeVerIdx].suggested_replies
+                : msg.suggested_replies;
+
+            // Gather prior user message context for ReplyCard regeneration
+            const prevUserMsg =
+              index > 0
+                ? [...messages.slice(0, index)]
+                    .reverse()
+                    .find((m) => m.role === "user")?.content
+                : undefined;
 
             return (
               <div
-                key={index}
-                className={`flex gap-3 max-w-3xl ${isUser ? "ml-auto flex-row-reverse" : "mr-auto"}`}
+                key={msg.id || index}
+                className={`flex gap-2.5 sm:gap-3 max-w-3xl ${
+                  isUser ? "ml-auto flex-row-reverse" : "mr-auto"
+                }`}
               >
-                {/* Avatar Icon */}
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
-                    isUser
-                      ? "bg-pink-100 text-romantic-600 border border-pink-200"
-                      : "bg-romantic-500 text-white"
-                  }`}
-                >
-                  {isUser ? <User className="w-4 h-4" /> : <Heart className="w-4 h-4 fill-white" />}
+                {/* Jeoparty Pixel Character Avatar */}
+                <div className="shrink-0 mt-0.5">
+                  <div className="p-0.5 rounded-xl bg-[#3529a8] border-2 border-black shadow-[0_2px_0_#000]">
+                    <PixelAvatar
+                      avatar={isUser ? myAvatar : herAvatar}
+                      size={34}
+                    />
+                  </div>
                 </div>
 
                 {/* Message Content Container */}
-                <div className="space-y-3 max-w-[88%]">
+                <div className="space-y-2.5 max-w-[86%] sm:max-w-[88%] min-w-0">
                   {/* User Attachments Preview (if any) */}
                   {msg.attachments && msg.attachments.length > 0 && (
                     <div className="grid grid-cols-1 gap-2">
@@ -1056,23 +1243,25 @@ How can I help you and Amelia today?`,
 
                   {/* Bubble or Inline Editor */}
                   {isEditing ? (
-                    <div className="p-3 bg-white border-2 border-romantic-400 rounded-3xl shadow-sm space-y-2">
+                    <div className="p-3 bg-white border-[3px] border-black rounded-2xl shadow-[0_4px_0_#000] space-y-2">
                       <textarea
                         value={editingMsgText}
                         onChange={(e) => setEditingMsgText(e.target.value)}
-                        className="w-full text-sm text-gray-900 p-2 focus:outline-none resize-none"
+                        className="w-full text-sm font-medium text-gray-900 p-2 rounded-xl border-2 border-black focus:outline-none resize-none"
                         rows={3}
                       />
                       <div className="flex justify-end gap-2 text-xs">
                         <button
+                          type="button"
                           onClick={() => setEditingMsgId(null)}
-                          className="px-3 py-1.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition"
+                          className="px-3 py-1.5 rounded-xl border-2 border-black bg-gray-100 text-black font-bold"
                         >
                           Cancel
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleSaveEdit(msg)}
-                          className="px-3 py-1.5 rounded-xl bg-romantic-500 hover:bg-romantic-600 text-white font-semibold transition"
+                          className="px-3.5 py-1.5 rounded-xl bg-[#38e54d] text-black font-black border-2 border-black shadow-[0_2px_0_#000]"
                         >
                           Save & Re-send
                         </button>
@@ -1080,46 +1269,255 @@ How can I help you and Amelia today?`,
                     </div>
                   ) : (
                     <div
-                      className={`p-4 rounded-3xl text-sm leading-relaxed shadow-sm group relative ${
+                      className={`p-3.5 sm:p-4 rounded-2xl text-sm leading-relaxed relative border-[2.5px] border-black shadow-[0_4px_0_#000] ${
                         isUser
-                          ? "bg-pink-50 text-gray-900 border border-pink-200 rounded-tr-none font-medium whitespace-pre-wrap"
-                          : "bg-white text-gray-900 border border-pink-100 rounded-tl-none whitespace-pre-wrap"
+                          ? "bg-[#ffe033] text-black rounded-tr-none font-semibold whitespace-pre-wrap break-words"
+                          : "bg-white text-gray-900 rounded-tl-none font-medium whitespace-pre-wrap break-words"
                       }`}
                     >
-                      {msg.content}
-
-                      {/* User message edit button */}
-                      {isUser && (
-                        <button
-                          onClick={() => handleStartEdit(msg)}
-                          className="absolute -left-7 top-2 text-gray-300 hover:text-gray-700 transition opacity-0 group-hover:opacity-100 p-1"
-                          title="Edit this message"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
+                      {isRegeneratingThis && (
+                        <div className="mb-2 px-3 py-1.5 rounded-xl bg-[#3ecbff] text-black border-2 border-black font-extrabold text-xs flex items-center gap-2">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Generating a fresh, non-duplicate response...</span>
+                        </div>
                       )}
+                      {displayedContent}
                     </div>
                   )}
 
-                  {/* Personalized Single Recommendation with YouTube-Style Feedback */}
-                  {msg.suggested_replies && msg.suggested_replies.length > 0 && (
+                  {/* Always-Visible Mobile & Desktop Message Action Bar (Edit, Copy, Regenerate, Like, Dislike, Delete, Version History) */}
+                  <div
+                    className={`flex flex-wrap items-center gap-1.5 text-[11px] ${
+                      isUser ? "justify-end" : "justify-start"
+                    }`}
+                  >
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-500 px-1.5">
+                      <Clock className="w-3 h-3" />
+                      {new Date(msg.created_at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+
+                    {/* Version Switcher for Assistant Messages with multiple regenerated versions */}
+                    {!isUser && msgVersions && msgVersions.length > 1 && (
+                      <div className="inline-flex items-center gap-0.5 bg-[#261c7a] text-white font-black px-2 py-0.5 rounded-lg border-2 border-black shadow-[0_2px_0_#000]">
+                        <button
+                          type="button"
+                          disabled={activeVerIdx <= 0}
+                          onClick={() =>
+                            setMessages((prev) =>
+                              prev.map((m) =>
+                                m.id === msg.id
+                                  ? {
+                                      ...m,
+                                      activeVersionIndex: Math.max(
+                                        0,
+                                        activeVerIdx - 1
+                                      ),
+                                    }
+                                  : m
+                              )
+                            )
+                          }
+                          className="hover:text-[#ffe033] disabled:opacity-35"
+                          title="Previous version"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="px-1">
+                          {activeVerIdx + 1} / {msgVersions.length}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={activeVerIdx >= msgVersions.length - 1}
+                          onClick={() =>
+                            setMessages((prev) =>
+                              prev.map((m) =>
+                                m.id === msg.id
+                                  ? {
+                                      ...m,
+                                      activeVersionIndex: Math.min(
+                                        msgVersions.length - 1,
+                                        activeVerIdx + 1
+                                      ),
+                                    }
+                                  : m
+                              )
+                            )
+                          }
+                          className="hover:text-[#ffe033] disabled:opacity-35"
+                          title="Next version"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* User Edit Button — Always visible on mobile and desktop! */}
+                    {isUser && !isEditing && (
+                      <button
+                        type="button"
+                        onClick={() => handleStartEdit(msg)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white hover:bg-[#ffe033] text-black font-bold border-2 border-black shadow-[0_2px_0_#000] active:translate-y-0.5"
+                        title="Edit message"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        <span>Edit</span>
+                      </button>
+                    )}
+
+                    {/* Copy Button (both User & AI) */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleCopyMessage(msg.id, displayedContent)
+                      }
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white hover:bg-[#ffe033] text-black font-bold border-2 border-black shadow-[0_2px_0_#000] active:translate-y-0.5"
+                      title="Copy message"
+                    >
+                      {copiedId === msg.id ? (
+                        <>
+                          <Check className="w-3 h-3 text-[#16a34a]" />
+                          <span>Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span>Copy</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* AI Assistant Actions: Regenerate, Like, Dislike */}
+                    {!isUser && msg.id > 0 && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={isRegeneratingThis || loading}
+                          onClick={() => handleRegenerateMessage(msg)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#3ecbff] hover:bg-[#6cdaff] text-black font-extrabold border-2 border-black shadow-[0_2px_0_#000] active:translate-y-0.5 disabled:opacity-50"
+                          title="Regenerate a fresh AI response"
+                        >
+                          <RefreshCw
+                            className={`w-3 h-3 ${
+                              isRegeneratingThis ? "animate-spin" : ""
+                            }`}
+                          />
+                          <span>Regenerate</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isRegeneratingThis}
+                          onClick={() => handleMessageFeedback(msg, "like")}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg font-extrabold border-2 border-black shadow-[0_2px_0_#000] active:translate-y-0.5 ${
+                            msg.rating === "like"
+                              ? "bg-[#38e54d] text-black"
+                              : "bg-white hover:bg-[#dcffe2] text-black"
+                          }`}
+                          title="Like this response"
+                        >
+                          <ThumbsUp className="w-3 h-3" />
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isRegeneratingThis}
+                          onClick={() => handleMessageFeedback(msg, "dislike")}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg font-extrabold border-2 border-black shadow-[0_2px_0_#000] active:translate-y-0.5 ${
+                            msg.rating === "dislike"
+                              ? "bg-[#ff5252] text-white"
+                              : "bg-white hover:bg-[#ffe3e3] text-black"
+                          }`}
+                          title="Dislike & replace response"
+                        >
+                          <ThumbsDown className="w-3 h-3" />
+                        </button>
+                      </>
+                    )}
+
+                    {/* Individual Message Delete Button with Inline Confirmation */}
+                    {msg.id > 0 && (
+                      <>
+                        {isConfirmingDelete ? (
+                          <div className="inline-flex items-center gap-1 bg-[#ff5252] text-white px-2 py-0.5 rounded-lg border-2 border-black shadow-[0_2px_0_#000] font-black">
+                            <span>Delete?</span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleConfirmDeleteSingleMessage(msg.id)
+                              }
+                              className="px-1.5 py-0.5 rounded bg-black text-[#ffe033] hover:bg-gray-900"
+                            >
+                              Yes
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingMsgId(null)}
+                              className="px-1.5 py-0.5 rounded bg-white text-black"
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setDeletingMsgId(msg.id)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white hover:bg-[#ff5252] hover:text-white text-gray-700 font-bold border-2 border-black shadow-[0_2px_0_#000] active:translate-y-0.5"
+                            title="Delete this message"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Personalized Single Recommendation with YouTube-Style Feedback & Version Switcher */}
+                  {displayedReplies && displayedReplies.length > 0 && (
                     <div className="space-y-2 pt-1">
-                      <div className="text-xs font-bold text-gray-800 flex items-center justify-between">
+                      <div className="text-xs font-black text-gray-900 flex items-center justify-between">
                         <span className="flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 text-romantic-500" />
+                          <Sparkles className="w-3.5 h-3.5 text-[#ff4b72]" />
                           Recommended Text for Amelia (Top Match):
                         </span>
-                        <span className="text-[11px] font-medium text-romantic-600 bg-pink-50 px-2 py-0.5 rounded-full border border-pink-100">
+                        <span className="text-[10.5px] font-extrabold text-black bg-[#ffe033] px-2 py-0.5 rounded-full border-2 border-black">
                           Personalized Suggestion
                         </span>
                       </div>
                       <div className="grid grid-cols-1">
-                        {/* Strictly render ONLY the single highest-ranked recommendation */}
-                        {msg.suggested_replies.slice(0, 1).map((reply, i) => (
+                        {displayedReplies.slice(0, 1).map((reply, i) => (
                           <ReplyCard
-                            key={reply.id || i}
+                            key={reply.id || `${msg.id}_r_${i}`}
                             reply={reply}
-                            conversationId={msg.conversation_id || activeConvoId || undefined}
+                            conversationId={
+                              msg.conversation_id || activeConvoId || undefined
+                            }
+                            conversationContext={prevUserMsg}
+                            onPersonalized={(_newText, updatedReply) => {
+                              if (updatedReply && msg.id > 0 && activeConvoId) {
+                                const nextReplies = [updatedReply];
+                                setMessages((prev) =>
+                                  prev.map((m) =>
+                                    m.id === msg.id
+                                      ? { ...m, suggested_replies: nextReplies }
+                                      : m
+                                  )
+                                );
+                                fetch(`/api/chat/${activeConvoId}`, {
+                                  method: "PATCH",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify({
+                                    action: "update_message",
+                                    messageId: msg.id,
+                                    suggestedReplies: nextReplies,
+                                  }),
+                                }).catch(() => {});
+                              }
+                            }}
                           />
                         ))}
                       </div>
@@ -1128,32 +1526,40 @@ How can I help you and Amelia today?`,
 
                   {/* AI Extracted Memory Suggestions */}
                   {msg.suggested_memories && msg.suggested_memories.length > 0 && (
-                    <div className="p-3.5 rounded-2xl bg-pink-50 border border-pink-200 space-y-2">
-                      <div className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
-                        <BookmarkPlus className="w-3.5 h-3.5 text-romantic-500" />
-                        Save discovered detail to Amelia's Memories?
+                    <div className="p-3.5 rounded-2xl bg-[#eef2ff] border-2 border-black shadow-[0_3px_0_#000] space-y-2">
+                      <div className="text-xs font-black text-gray-900 flex items-center gap-1.5">
+                        <BookmarkPlus className="w-3.5 h-3.5 text-[#3529a8]" />
+                        Save discovered detail to Amelia&apos;s Memories?
                       </div>
                       {msg.suggested_memories.map((mem, i) => {
                         const isSaved = savedMemoryTitles.includes(mem.title);
                         return (
                           <div
                             key={i}
-                            className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-pink-100 text-xs"
+                            className="flex items-center justify-between p-2.5 rounded-xl bg-white border-2 border-black text-xs"
                           >
                             <div>
-                              <span className="font-bold text-gray-900">[{mem.category}] {mem.title}</span>
-                              <p className="text-gray-600 text-[11px] mt-0.5">{mem.content}</p>
+                              <span className="font-black text-gray-900">
+                                [{mem.category}] {mem.title}
+                              </span>
+                              <p className="text-gray-700 font-medium text-[11px] mt-0.5">
+                                {mem.content}
+                              </p>
                             </div>
                             <button
                               onClick={() => handleSaveMemory(mem)}
                               disabled={isSaved}
-                              className={`shrink-0 ml-3 px-3 py-1 rounded-xl font-semibold transition flex items-center gap-1 ${
+                              className={`shrink-0 ml-3 px-3 py-1 rounded-xl font-black border-2 border-black shadow-[0_2px_0_#000] transition flex items-center gap-1 ${
                                 isSaved
-                                  ? "bg-emerald-500 text-white"
-                                  : "bg-romantic-500 text-white hover:bg-romantic-600"
+                                  ? "bg-[#38e54d] text-black"
+                                  : "bg-[#ff6bd6] text-black hover:bg-[#ff85de]"
                               }`}
                             >
-                              {isSaved ? <CheckCircle2 className="w-3 h-3" /> : <BookmarkPlus className="w-3 h-3" />}
+                              {isSaved ? (
+                                <CheckCircle2 className="w-3 h-3" />
+                              ) : (
+                                <BookmarkPlus className="w-3 h-3" />
+                              )}
                               <span>{isSaved ? "Saved" : "Save"}</span>
                             </button>
                           </div>
@@ -1161,23 +1567,6 @@ How can I help you and Amelia today?`,
                       })}
                     </div>
                   )}
-
-                  {/* Message Meta / Copy button */}
-                  <div className={`flex items-center gap-2 text-[10.5px] text-gray-400 ${isUser ? "justify-end" : "justify-start"}`}>
-                    <Clock className="w-3 h-3" />
-                    <span>
-                      {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                    {!isUser && (
-                      <button
-                        onClick={() => handleCopyMessage(msg.id, msg.content)}
-                        className="hover:text-gray-700 ml-1 transition"
-                        title="Copy AI response"
-                      >
-                        {copiedId === msg.id ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                      </button>
-                    )}
-                  </div>
                 </div>
               </div>
             );
@@ -1520,6 +1909,7 @@ How can I help you and Amelia today?`,
         isOpen={virtualDatesModalOpen}
         onClose={() => setVirtualDatesModalOpen(false)}
         onSelectPrompt={(prompt) => handleSend(prompt)}
+        initialRoomCode={roomCodeFromUrl}
       />
     </div>
   );

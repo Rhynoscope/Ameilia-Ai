@@ -153,6 +153,14 @@ export interface SuggestedReply {
   styleTags?: string[];
   lengthCategory?: "short" | "medium" | "long";
   rating?: "like" | "dislike" | null;
+  versions?: {
+    message: string;
+    tone: string;
+    explanation?: string;
+    label?: string;
+    createdAt?: string;
+  }[];
+  activeVersionIndex?: number;
 }
 
 export interface ResponseFeedback {
@@ -228,6 +236,14 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   suggested_replies?: SuggestedReply[];
   suggested_memories?: ExtractedMemorySuggestion[];
+  versions?: {
+    content: string;
+    suggested_replies?: SuggestedReply[];
+    created_at?: string;
+    label?: string;
+  }[];
+  activeVersionIndex?: number;
+  rating?: "like" | "dislike" | null;
   created_at: string;
 }
 
@@ -235,6 +251,7 @@ export interface ConversationSummary {
   id: string;
   title: string;
   archived?: boolean;
+  pinned?: boolean;
   last_message?: string;
   last_message_at?: string;
   created_at: string;
@@ -293,4 +310,74 @@ export interface VirtualDateIdea {
   durationMinutes: string;
   invitationMessage: string;
   prepTip: string;
+}
+
+export type MultiplayerGameType =
+  | "chess"
+  | "checkers"
+  | "monopoly"
+  | "uno"
+  | "life"
+  | "party_trivia"
+  | "party_draw"
+  | "party_wyr"
+  | "party_rps"
+  | "party_memory";
+
+export interface RoomPlayer {
+  id: string;
+  name: string;
+  seat: 0 | 1;
+  avatar: {
+    color: number;
+    eyes: number;
+    mouth: number;
+    hat: number;
+  };
+  connected: boolean;
+  lastSeenAt: string;
+  isBot?: boolean;
+}
+
+export interface RoomChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  createdAt: string;
+}
+
+export interface RoomReaction {
+  id: string;
+  senderId: string;
+  senderName: string;
+  emoji: string;
+  label: string;
+  createdAt: string;
+}
+
+export interface VirtualDateRoom {
+  code: string;
+  gameType: MultiplayerGameType;
+  status: "waiting" | "playing" | "finished";
+  hostId: string;
+  players: RoomPlayer[];
+  state: any;
+  chat: RoomChatMessage[];
+  reactions: RoomReaction[];
+  winner?: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GameHistoryRecord {
+  id: number;
+  room_code: string;
+  game_type: MultiplayerGameType;
+  game_title: string;
+  players: { name: string; avatar?: any; score?: number | string }[];
+  winner: string;
+  summary: string;
+  played_at: string;
 }

@@ -10,13 +10,13 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: "cover",
-  themeColor: "#ffffff",
+  themeColor: "#261c7a",
 };
 
 export const metadata: Metadata = {
-  title: "Ameilia AI — Personal Relationship Companion",
+  title: "Ameilia AI — Personal Relationship Companion & Multiplayer Dates",
   description:
-    "An intelligent, unified relationship companion and texting coach to communicate consistently, naturally, and warmly with Amelia across the distance.",
+    "An intelligent relationship companion, texting coach, and playable multiplayer Virtual Dates arcade for you and Amelia.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -43,7 +43,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased min-h-dvh flex flex-col bg-white text-gray-900 selection:bg-pink-100 selection:text-romantic-700">
+      <body className="antialiased min-h-dvh flex flex-col text-gray-900">
         <ServiceWorkerRegistration />
         <DemoModeBanner />
         <Navbar />
